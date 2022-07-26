@@ -1,0 +1,162 @@
+#!/bin/bash
+
+File Sharing Server on the Raspberry Pi
+
+Hardware: Raspberry Pi 4 Model B 8GB (RPI), Toshiba Canvio Basics 4TB (External Hard Drive), Samsung Pro 32GB (SD Card)
+OS: Alpine Linux (aarch64)
+File Sharing Software: VSFTPD (Very Secure FTP Daemon)
+
+Alpine Linux Install
+1.1. First we need to install the operating system on the RPI, the image chosen was the one with the Raspberry Pi kernel. Out of the three options, the aarch64 architecture was chosen since this is the 8GB RAM version. The choice of Alpine for this project is because it comes with many security features in mind pre-built into the system which makes it more robust against regular attacks like a Buffer Overflow. Alpine Linux is also a very minimalist distribution which makes it low on resources.
+
+1.2. Once we have the image we need to mount the SD Card so that we can extract the Alpine Image into it.
+List available devices to identify the SD Card
+# lsblk
+Then, once identified, mount the SD Card
+# mount /dev/{device_name} /path/to/mount/the/device/on
+Extract the files from the Alpine image
+# gzip -d /path/to/alpine-rpi-3.16.1-aarch64.tar.gz
+Untar the file into the SD Card
+# tar xf /path/to/alpine-rpi-3.16.1-aarch64.tar.gz --directory=/path/where/SD Card/is/mounted/on
+
+1.3. Once the file transfer is complete, we need to synchronize the files to prevent any errors and then unmount the SD Card.
+# sync; umount /path/where/SD Card/is/mounted/on
+(Make sure that the SD Card is using the FAT file system, otherwise it won\'t boot)
+
+1.4. Insert the SD Card into the RPI and boot it up. 
+
+1.5. Once on the Login screen, the username is root and no password is required.
+
+1.6. After setup Alpine
+# setup-alpine
+Keyboard Layout: pt
+Variant: pt
+Hostname: vsalpine
+
+
+
+
+
+
+
+
+
+
+
+
+##############################
+##############################
+##############################
+File Sharing Server on the Raspberry Pi
+
+Hardware: Raspberry Pi 4 Model B 8GB (RPI), Toshiba Canvio Basics 4TB (External Hard Drive), Samsung Pro 32GB (SD Card)
+OS: Raspberry Pi OS (aarch64)
+File Sharing Software: VSFTPD (Very Secure FTP Daemon)
+
+Raspberry Pi OS Install
+1.1. First step is to unzip the obtained image of the installation for Raspberry Pi OS
+# unxz /path/to/2022-04-04-raspios-bullseye-armhf.img.xz
+
+1.2. Afterwards we need to burn the image into the SD Card
+List available devices to identify the SD Card
+# lsblk
+Then, once identified, burn the OS image into the SD Card using the rpi-imager software
+
+1.3. Unmount the SD Card if it is mounted and insert it into the Raspberry Pi, then boot into it to complete the install.
+
+1.4. Follow the setup instructions and finish setting up Raspberry Pi OS.
+
+1.5. Update and upgrade the operating system.
+# sudo apt update -y && sudo apt upgrade -y
+(A restart may be needed after the first setup for the update/upgrade to work. If that still generates errors the "--fix-missing" argument should be added to the upgrade command.)
+
+Setting up the SSH server.
+2.1. Open the file /etc/ssh/sshd_config with a text editor and make sure the following option is set as below. (Conf file shared in the documentation project)
+(...)
+PermitRootLogin no
+(...)
+
+2.2. Check if the sshd service is active.
+# systemctl status ssh.service
+
+2.3. Activate the sshd servie and enable it to start on boot.
+# systemctl enable ssh.service --now
+(Repeat step 2.2. to check if the ssh.service started successfully)
+Check that port 22 (default ssh port) is open and listening
+# ssh localhost
+# telnet localhost 22
+(Install of telnet may be required "apt install telnet -y")
+
+2.4. Obtain the IP of the RPI
+# ip a|grep inet
+
+2.5. Test the connection from another machine and see if you can remotely connect to the RPI
+# ssh RPI_user_name@RPI_IP_address
+
+Installation and configuration of VSFTPD
+3.1. Install the VSFPTD package
+# pkg install vsftpd
+
+3.2. Open the file /etc/hosts.allow using a text editor. Then insert the following;
+(...)
+# Allow all connections
+vsftpd: ALL
+# IP address range
+vsftpd: 10.0.0.0/255.255.255.0
+(...)
+
+3.3. Create a backup file of /etc/vsftpd.conf
+# cp /etc/vsftpd.conf /etc/vsftpd.conf.bk
+
+3.4. Open the file /etc/vsftpd.conf using a text editor. Then make sure the following is added;
+listen=NO
+# This option disables anonymous access to the VSFTPD server
+anonymous_enable=NO
+# This directive enables listening on IPv6 sockets
+listen_ipv6=YES
+# This allows users to make changes to the filesystem
+write_enable=YES
+# This option allows users in /etc/passwd to login
+local_enable=YES
+# Activate directory messages when remote users go into a certain directory
+dirmessage_enable=YES
+# This option will make vsftpd display directory listings with the time in your local time zone
+use_localtime=YES
+# Logging of uploads/downloads
+xferlog_enable=YES
+# Make sure PORT transfer connections originate from port 20 (ftp-data)
+connect_from_port_20=YES
+# Change the default connection timeout for an idle session
+idle_session_timeout=6000
+# Change the default value for timeout of a data connection
+data_connection_timeout=150
+# Custom login banner string
+ftpd_banner=Welcome to the DingusServer very secury file transfer service.
+# This string is the name of the PAM service vsftpd will use
+pam_service_name=vsftpd
+# This option specifies the location of the RSA certificate to use for SSL encrypted connections.
+rsa_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem
+rsa_private_key_file=/etc/ssl/private/ssl-cert-snakeoil.key
+ssl_enable=NO
+
+3.5. Verify that the vsftpd service is started and enabled
+# systemctl status vsftpd
+(If not, enable it and start it, if already started when the conf file was edited, restart the service to apply the changes)
+# systemctl enable vsftpd --now
+# systemctl restart vsftpd
+
+3.6. Verify that vsftpd is listening on port 21 and allowing connections
+# netstat -tulpn|grep vsftpd
+# telnet localhost 21
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,305 @@
+Oracle Linux Squid Test
+
+Instalação das VM\'s
+1.1. SquidLinux-1
+Hostname: squidnet
+IP: 10.0.2.15, 192.168.122.1
+ssh port in nat network: 3322
+
+1.2. SquidLinux-2
+Hostname: squidgley
+IP: 192.168.122.2
+
+NOTA: Na criação das máquinas virtuais é importante selecionar na configuração da network o 1º adapter para a SquidLinux-1 e o 1º network adapter da SquidLinux-2 como "Internal Network" para garantir que ambas as máquinas estão interligadas. Igualmente importante é garantir que ambas as VM\'s estão na mesma vlan que neste caso será a "intnet".
+
+Configuração de rede inicial
+2.1 SquidLinux-1
+Editar o ficheiro /etc/sysconfig/network-scripts/ifcfg-enp0s8 e garantir que os parâmetros estão corretos
+TYPE=Ethernet
+PROXY_METHOD=none
+BROWSER_ONLY=no
+BOOTPROTO=none
+DEFROUTE=yes
+IPV4_FAILURE_FATAL=no
+IPV6INIT=yes
+IPV6_AUTOCONF=yes
+IPV6_DEFROUTE=yes
+IPV6_FAILURE_FATAL=no
+NAME=enp0s8
+UUID=69d61313-2e09-49b8-8185-1fb5345c2929
+DEVICE=enp0s8
+ONBOOT=yes
+NETMASK=255.255.255.0
+IPADDR=192.168.122.1
+
+2.2. SquidLinux-2
+Editar o ficheiro /etc/sysconfig/network-scripts/ifcfg-enp0s3 e garantir que os parâmetros estão corretos
+TYPE=Ethernet
+PROXY_METHOD=none
+BROWSER_ONLY=no
+BOOTPROTO=none
+DEFROUTE=yes
+IPV4_FAILURE_FATAL=no
+IPV6INIT=yes
+IPV6_AUTOCONF=yes
+IPV6_DEFROUTE=yes
+IPV6_FAILURE_FATAL=no
+NAME=enp0s3
+UUID=69d61313-2e09-49b8-8185-1fb5345c2929
+DEVICE=enp0s3
+ONBOOT=yes
+NETMASK=255.255.255.0
+IPADDR=192.168.122.2
+
+Atribuír um ip à network interface "Internal Network"
+Garantir que as interfaces do SquidLinux-1 e SquidLinux-2 estão a comunicar ao defenir a rota e atribuír o Default Gateway
+
+2.3. Confirmar ligação
+Testar a ligação entre todas as máquinas
+SquidLinux-1
+# ping 192.168.122.2
+
+SquidLinux-2
+# ping 192.168.122.1
+
+Importante garantir também que a máquina SquidLinux-2 não está a comunicar com máquinas fora da rede interna de forma alguma até este ponto, o seguinte ping deve falhar
+# ping 8.8.8.8
+
+Instalar o Squid
+2.1 SquidLinux-1
+# mkdir /mnt/cdrom
+# mount /dev/cdrom /mnt/cdrom
+# cat > /etc/yum.repos.d/local.repo <<EOF
+[LocalRepo_BaseOS]
+name=LocalRepository_BaseOS
+baseurl=file:///mnt/cdrom/BaseOS
+enabled=1
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-oracle
+
+[LocalRepo_AppStream]
+name=LocalRepository_AppStream
+baseurl=file:///mnt/cdrom/AppStream
+enabled=1
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-oracle
+EOF
+
+Colocar o *.iso de instalação na drive da máquina virtual através do VirtualBox. Fazer mount à *.iso e criar um repositório local para instalação do Squid
+# sudo yum --disablerepo=* --enablerepo=Local* install squid
+Instalar o Squid através do repositório local ao desativar os outros repositórios primeiro.
+
+Configurar o Squid
+3.1. Criar uma cópia de segurança do ficheiro de configuração do Squid
+# cp /etc/squid/squid.conf /etc/squid/squid.conf.bk
+Criar uma cópia de segurança permite uma comparação com as alterações feitas através do comando diff e permite também ter sempre uma forma de reverter o processo de configuração
+
+3.2. Editar o ficheiro de Configuração /etc/squid/squid.conf
+Permitir o acesso localnet apenas aos ips necessários
+(...)
+#acl localnet src 0.0.0.1-0.255.255.255 # RFC 1122 "this" network (LAN)
+acl localnet src 10.0.0.0/8            # RFC 1918 local private network (LAN)
+#acl localnet src 100.64.0.0/10         # RFC 6598 shared address space (CGN)
+#acl localnet src 169.254.0.0/16        # RFC 3927 link-local (directly plugged) machines
+#acl localnet src 172.16.0.0/12         # RFC 1918 local private network (LAN)
+acl localnet src 192.168.0.0/16         # RFC 1918 local private network (LAN)
+#acl localnet src fc00::/7              # RFC 4193 local private network range
+#acl localnet src fe80::/10             # RFC 4291 link-local (directly plugged) machines
+(...)
+
+Permitir o acesso aos hosts no ficheiro /etc/squid/allowed.acl e bloquear o acesso a todos os outros websites
+(...)
+acl allowed_websites dstdomain "/etc/squid/allowed.acl"
+http_access allow allowed_websites
+http_access deny all
+(...)
+
+Garantir que o localhost e a localnet estão permitidos no acesso http_port
+(...)
+http_access allow localnet
+http_access allow localhost
+(...)
+
+O squid deverá estar configurado para escutar a porta 3128 por defeito, adicionar a porta 3129 com a flag "intercept" de forma a que o servidor redirecione todos os pedidos que a interface enp0s8 receba.
+(...)
+http_port 3128
+(...)
+
+3.3. Criar o ficheiro /etc/squid/allowed.acl
+# echo ".google.com" > /etc/squid/allowed.acl
+
+3.4. Ativar o serviço de proxy
+# systemctl enable squid
+# systemctl start squid
+# systemctl status squid
+
+3.5. Permitir o acesso ao port 3128 onde o Squid está à escuta
+# firewall-cmd --add-port=3128/tcp --permanent
+# firewall-cmd --reload
+
+3.6. Instalar o telnet no SquidLinux-2 através dum repositório local para testar a ligação ao SquidLinux-1
+# mkdir /mnt/cdrom
+# mount /dev/cdrom /mnt/cdrom
+# cat > /etc/yum.repos.d/local.repo <<EOF
+[LocalRepo_BaseOS]
+name=LocalRepository_BaseOS
+baseurl=file:///mnt/cdrom/BaseOS
+enabled=1
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-oracle
+
+[LocalRepo_AppStream]
+name=LocalRepository_AppStream
+baseurl=file:///mnt/cdrom/AppStream
+enabled=1
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-oracle
+EOF
+
+# sudo yum --disablerepo=* --enablerepo=Local* install telnet
+Através do SquidLinux-2 tentar ligar à porta do squid
+# telnet 192.168.122.1 3128
+
+Finalmente, testar se o squid está a filtrar devidamente o tráfego tanto na VM SquidLinux-1 como na VM SquidLinux-2
+# curl -x http://192.168.122.1:3128 -I http://www.google.com
+# curl -x http://192.168.122.1:3128 -I http://www.microsoft.com
+# curl -x http://192.168.122.1:3128 -I http://www.facebook.com
+
+O acesso ao google deverá devolver um "HTTP/1.1 200 OK" enquanto que o acesso ao facebook e microsoft deverá devolver um "HTTP/1.1 403 Forbidden".
+
+Teste ao yum
+4.1. Reverter os bloqueios de acessos no squid de forma a que todo o tráfego seja permitido para todos os websites.
+# vim /etc/squid/squid.conf
+(...)
+# acl allowed_websites dstdomain "/etc/squid/allowed.acl"
+# http_access allow allowed_websites
+# http_access deny all
+http_access allow all
+(...)
+
+4.2. Reiniciar o serviço squid para aplicar as alterações
+# systemctl restart squid
+
+4.3. Na SquidLinux-2 editar o ficheiro /etc/yum.conf para que o mesmo corra o comando através do SquidLinux-1
+[main]
+gpgcheck=1
+installonly_limit=3
+clean_requirements_on_remove=True
+best=True
+skip_if_unavailable=True
+proxy=http://192.168.122.1:3128
+
+O argumento "skip_if_unavailable" é alterado para "True" porque no passo 3.6. foi adicionado um repositório local que não será usado, a imagem foi removida do VirtualBox e como tal os repositórios Local* estarão "unavailable".
+
+4.4. Antes de iniciar o update é necessário garantir que o SquidLinux-1 está devidamente a interceptar o trânsito.
+# tail -f /var/log/squid/access.log
+
+4.5. Proceder com o update
+# yum update
+
+O comando "tail -f" permite ver os logs em tempo real, ao longo do update o access.log deverá receber diversas entradas semelhantes à seguinte;
+"1649330441.050     62 192.168.122.2 TCP_TUNNEL/200 8025 CONNECT yum.oracle.com:443 - HIER_DIRECT/23.1.5.95 -"
+
+4.6. Solidificar que o tráfego só pode sair do SquidLinux-2 através da proxy do SquidLinux-1
+Não interromper o comando "tail -f /var/log/squid/access.log"
+Editar novamente o /etc/yum.conf e comentar o proxy
+(...)
+#proxy=http://192.168.122.1:3128
+(...)
+Tentar instalar um pacote inofensivo
+# yum install htop
+O install deverá falhar e nenhuma entrada adicional deverá aparecer no access.log
+
+Usar a VM SquidLinux-1 como um router para o SquidLinux-2
+5.1 Configurar a Internal Network do SquidLinux-1 para ser a default gateway do SquidLinux-2
+Editar novamente o ficheiro /etc/sysconfig/network-scripts/ifcfg-enp0s3 no SquidLinux-2
+(...)
+GATEWAY=192.168.122.1
+(...)
+Reiniciar a máquina para executar o Network-script.
+# shutdown -r now
+
+5.2. Confirmar que o SquidLinux-1 está a ser usado como default gateway para o SquidLinux-2
+[root@squidgley ~]# route -n
+Kernel IP routing table
+Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
+0.0.0.0         192.168.122.1   0.0.0.0         UG    100    0        0 enp0s3
+192.168.122.0   0.0.0.0         255.255.255.0   U     100    0        0 enp0s3
+
+5.4. Verificar também se o forwarding do Kernel está ativo (o resultado deverá ser 1)
+# cat /proc/sys/net/ipv4/ip_forward
+
+Caso não seja, editar o ficheiro /etc/sysctl.conf
+net.ipv4.ip_forward=1
+
+Depois aplicar as alterações na configuração
+# sysctl -p /etc/sysctl.conf
+
+5.5. Configurar o IPTABLES para que aceite o redirecionamento de pacotes
+iptables -t nat -A POSTROUTING -s 192.168.122.0/24 -d 0/0 -j MASQUERADE
+
+O argumento -t(--table) é necessário para defenir a table que será "nat" que é a tabela consultada quando uma nova conecção é encontrada. O argumento "-A POSTROUTING" é adicionado para pode alterar os packets após o OUTPUT chain. O parâmetro -s(--source) é adicionado para inicar que endereço os pacotes vêm. O parâmetro "-d 0/0" é indicado para indicar o endereço de destino. Por fim o parâmetro -j(--jump) é adicionado para mascarar os packets.
+
+5.6. Garantir que tanto o SquidLinux-1 como o SquidLinux-2 conseguem comunicar um com o outro e que o SquidLinux-2 consegue conectar-se à rede externa
+SquidLinux-1
+ping 192.168.122.2
+
+SquidLinux-2
+ping 192.168.122.1
+ping 10.0.2.15
+ping 8.8.8.8
+
+5.7. Configurar o firewalld para substituir o iptables
+
+O comando iptables permite o ping do SquidLinux-2 para para outras máquinas fora da rede interna, mas não é permanente. Em adição a esse ponto o Oracle Linux 8.5 no qual este teste foi realisado já não possui uma backend para o iptables, como tal é necessário migrar a regra para o serviço mais atualizado que é o firewalld.
+
+firewall-cmd --permanent --direct --add-rule ipv4 nat POSTROUTING 0 -o enp0s3 -j MASQUERADE
+firewall-cmd --permanent --direct --add-rule ipv4 filter FORWARD 0 -i enp0s8 -o enp0s3 -j ACCEPT
+firewall-cmd --permanent --direct --add-rule ipv4 filter FORWARD 0 -i enp0s3 -o enp0s8 -m state --state RELATED,ESTABLISHED -j ACCEPT
+
+Após testadas as configurações, o parâmetro "--permanent" é adicionado para garantir que as regras se mantêm, mesmo após um reboot ou um restart do serviço do firewalld.
+
+
+6.1. Instalar o unbound
+# sudo yum --disablerepo=* --enablerepo=Local* install unbound
+
+6.2. Criar um backup do /etc/unbound/unbound.conf
+# cp /etc/unbound/unbound.conf /etc/unbound/unbound.conf.bk
+
+6.3. Editar o /etc/unbound/unbound.conf
+#The main configuration of unbound goes in the server clause
+server:
+
+#IPs that unbound will be listening to
+	interface: 0.0.0.0
+
+#Access control as to which ip addresses are allowed or denied
+	access-control: 192.168.0.0/16 allow
+	access-control: 10.0.2.15/24 allow
+	access-control: 127.0.0.1 allow
+	access-control: ::1 allow
+	access-control: 0.0.0.0/0 deny
+	access-control: ::/0 deny
+
+#Logging configurations
+	chroot: ""
+	logfile: /var/log/unbound.log
+	verbosity: 1
+	log-queries: yes
+
+6.4. Adicionar o SquidLinux-1 como DNS server no SquidLinux-2
+SquidLinux-2 /etc/resolv.conf
+nameserver 192.168.122.1
+
+6.4. Verificar a integridade do ficheiro de configuração e configurar o serviço
+# unbound-checkconf
+Deverá devolver o seguinte resultado "unbound-checkconf: no errors in /etc/unbound/unbound.conf" caso contrário rever o ficheiro unbound.conf.
+# systemctl enable unbound
+# systemctl start unbound
+# systemctl status unbound
+O serviço unbound.service deverá estar active e enabled sem erros.
+
+6.5. Abrir a porta em que o unbound está à escuta
+# firewall-cmd --add-port=53/tcp --permanent
+# firewall-cmd --add-port=53/udp --permanent
+# firewall-cmd --reload

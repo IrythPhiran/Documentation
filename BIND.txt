@@ -1,0 +1,310 @@
+Oracle Linux Final Proxy/DNS Test
+
+Instalação das VMs
+1.1. ProxyTest-1
+hostname: tinynet1
+ip: 10.0.2.15(NAT), 192.168.122.1(Internal Network)
+ssh port in nat network: 4445
+
+1.2. ProxyTest-2
+
+NOTA: Na criação das máquinas virtuais é importante selecionar na configuração da network o 2º adapter para o Tinytest-1 e o 1º network adapter do Tinytest-2 como "Internal Network" para garantir que ambas as máquinas estão interligadas. Igualmente importante é garantir que ambas as VMs estão na mesma vlan que neste caso será a "intnet".
+
+Configuração de rede
+2.1 ProxyTest-1
+Editar o ficheiro /etc/sysconfig/network-scripts/ifcfg-enp0s8 e garantir que os parâmetros estão corretos
+TYPE=Ethernet
+PROXY_METHOD=none
+BROWSER_ONLY=no
+BOOTPROTO=none
+DEFROUTE=yes
+IPV4_FAILURE_FATAL=no
+IPV6INIT=yes
+IPV6_AUTOCONF=yes
+IPV6_DEFROUTE=yes
+IPV6_FAILURE_FATAL=no
+NAME=enp0s8
+UUID=69d61313-2e09-49b8-8185-1fb5345c2929
+DEVICE=enp0s8
+ONBOOT=yes
+NETMASK=255.255.255.0
+IPADDR=192.168.122.1
+
+2.2. ProxyTest-2
+Editar o ficheiro /etc/sysconfig/network-scripts/ifcfg-enp0s3 e garantir que os parâmetros estão corretos
+TYPE=Ethernet
+PROXY_METHOD=none
+BROWSER_ONLY=no
+BOOTPROTO=none
+DEFROUTE=yes
+IPV4_FAILURE_FATAL=no
+IPV6INIT=yes
+IPV6_AUTOCONF=yes
+IPV6_DEFROUTE=yes
+IPV6_FAILURE_FATAL=no
+NAME=enp0s3
+UUID=69d61313-2e09-49b8-8185-1fb5345c2929
+DEVICE=enp0s3
+ONBOOT=yes
+NETMASK=255.255.255.0
+IPADDR=192.168.122.2
+Alterar também o hostname da máquina clonada.
+#hostnamectl set-hostname tinynet2
+
+2.3. Confirmar ligação
+Testar a ligação entre todas as máquinas
+ProxyTest-1
+# ping 192.168.122.2
+
+ProxyTest-2
+# ping 192.168.122.1
+
+Importante garantir também que a máquina ProxyTest-2 não está a comunicar com máquinas fora da rede interna de forma alguma até este ponto, o seguinte ping deve falhar
+# ping 8.8.8.8
+
+Instalar o TinyProxy
+3.1. Obter a imagem de instalação do GitHub instalando o git. O TinyProxy não se encontra disponível nem na imagem de instalação, nem nos repositórios oficiais da Oracle (EPEL incluído), como tal a instalação teve de ser feita através do código fonte.
+# dnf install git
+# git clone https://github.com/tinyproxy/tinyproxy.git
+
+3.2. Para a instalação do TinyProxy através do código fonte é necessário instalar os seguintes pacotes
+# dnf groupinstall "Development Tools"
+# dnf install automake
+
+3.3. Entrar dentro do diretório de instalação e configurar a instalação
+# cd tinyproxy
+# ./autogen.sh
+
+3.4. Proceder à compilação do software. A flag "--enable-filter" deve ser adicionada ao "./configure" de forma a que o TinyProxy tenha a capacidade de filtrar certos domínios e URLs.
+# ./configure --enable-filter
+# make install
+
+Configurar o TinyProxy
+4.1. Copiar o ficheiro de exemplo para o diretório de configuração do sistema
+# mkdir /etc/tinyproxy
+# cp /usr/local/etc/tinyproxy/tinyproxy.conf /etc/tinyproxy/tinyproxy.conf
+
+4.2. Editar os seguintes parâmetros do ficheiro de configuração
+(...)
+# Filter: This allows you to specify the location of the filter file.
+#
+Filter "/etc/tinyproxy/filter"
+(...)
+
+(...)
+# FilterURLs: Filter based on URLs rather than domains.
+#
+FilterURLs Off
+(...)
+
+(...)
+# FilterDefaultDeny: Change the default policy of the filtering system.
+# If this directive is commented out, or is set to "No" then the default
+# policy is to allow everything which is not specifically denied by the
+# filter file.
+#
+# However, by setting this directive to "Yes" the default policy becomes
+# to deny everything which is _not_ specifically allowed by the filter
+# file.
+#
+FilterDefaultDeny Yes
+(...)
+
+(...)
+# Filter: This allows you to specify the location of the filter file.
+#
+Filter "/etc/tinyproxy/filter"
+(...)
+
+(...)
+# LogFile: Allows you to specify the location where information should
+# be logged to.  If you would prefer to log to syslog, then disable this
+# and enable the Syslog directive.  These directives are mutually
+# exclusive. If neither Syslog nor LogFile are specified, output goes
+# to stdout.
+#
+LogFile "/var/log/tinyproxy.log"
+(...)
+
+(...)
+Allow 127.0.0.1
+Allow ::1
+Allow 192.168.122.2
+(...)
+
+4.3. Criar o ficheiro /etc/tinyproxy/filter
+# echo "google.com" > /etc/tinyproxy/filter
+
+4.4. Mover o ficheiro /usr/local/bin/tinyproxy para o diretório /usr/sbin
+# mv /usr/local/bin/tinyproxy /usr/sbin
+
+4.5. Criar o serviço do TinyProxy no SystemD, criar o ficheiro /etc/systemd/system/tinyproxy.service
+[Unit]
+Description=TinyProxy
+After=network.target
+
+[Service]
+Type=simple
+User=nobody
+ExecStart=/usr/sbin/tinyproxy -d  -c /etc/tinyproxy/tinyproxy.conf
+
+[Install]
+WantedBy=multi-user.target
+
+4.6. Dar Ownership ao user nobody dos ficheiros dentro do diretório /etc/tinyproxy
+# chmod -R nobody /etc/tinyproxy
+
+4.6. Fazer enable ao serviço, iniciar o mesmo e garantir que está a funcionar sem erros
+# sudo systemctl start tinyproxy.service
+# sudo systemctl enable tinyproxy.service
+# sudo systemctl status tinyproxy.service
+
+4.7. Permitir o acesso ao port 888 8 onde o tinyproxy está à escuta
+# firewall-cmd --add-port=8888/tcp --permanent
+# firewall-cmd --reload
+
+4.7. Instalar o telnet no ProxyTest-2 através dum repositório local para testar a ligação ao ProxyTest-1
+# mkdir /mnt/cdrom
+# mount /dev/cdrom /mnt/cdrom
+# cat > /etc/yum.repos.d/local.repo <<EOF
+[LocalRepo_BaseOS]
+name=LocalRepository_BaseOS
+baseurl=file:///mnt/cdrom/BaseOS
+enabled=1
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-oracle
+
+[LocalRepo_AppStream]
+name=LocalRepository_AppStream
+baseurl=file:///mnt/cdrom/AppStream
+enabled=1
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-oracle
+EOF
+
+# dnf --disablerepo=* --enablerepo=Local* install telnet
+
+Através do ProxyTest-2 tentar ligar à porta do tinyproxy
+# telnet 192.168.122.1 8888
+
+Finalmente, testar se ostá a filtrar devidamente o tráfego tanto na VM ProxyTest-1 como na VM ProxyTest-2
+# curl --proxy http://192.168.122.1:8888 -I google.com
+# curl --proxy http://192.168.122.1:8888 -I microsoft.com
+# curl --proxy http://192.168.122.1:8888 -I facebook.com
+
+O acesso ao google deverá devolver o seguinte resultado;
+"HTTP/1.1 301 Moved Permanently
+Via: 1.1 tinyproxy (tinyproxy/1.11.0-rc1-55-git-26db3f6)"
+O acesso ao facebook e microsoft deverão devolver o seguinte resultado:
+"HTTP/1.1 403 Filtered"
+
+Teste ao Yum
+5.1. Reverter os bloqueios de acessos no tinyproxy de forma a que todo o tráfego seja permitido para todos os websites. Editar o ficheiro /etc/tinyproxy/tinyproxy.conf
+(...)
+# FilterDefaultDeny yes
+(...)
+
+5.2. Reiniciar o serviço tinyproxy para aplicar as alterações
+# systemctl restart tinyproxy
+
+5.3. No ProxyTest-2 editar o ficheiro /etc/yum.conf para que o mesmo corra o comando através do ProxyTest-1
+[main]
+gpgcheck=1
+installonly_limit=3
+clean_requirements_on_remove=True
+best=True
+skip_if_unavailable=True
+proxy=http://192.168.122.1:8888
+
+O argumento "skip_if_unavailable" é alterado para "True" porque no passo 3.6. foi adicionado um repositório local que não será usado, a imagem foi removida do VirtualBox e como tal os repositórios Local* estarão "unavailable".
+
+5.4. Antes de iniciar o update é necessário garantir que o ProxyTest-1 está devidamente a interceptar o trânsito.
+# tail -f /var/log/tinyproxy.log
+
+O comando "tail -f" permite ver os logs em tempo real, ao longo do update o access.log deverá receber diversas entradas semelhantes às seguintes;
+"CONNECT   May 02 13:48:18.730 [3134]: Connect (file descriptor 11): 192.168.122.2"
+"CONNECT   May 02 13:48:18.750 [3134]: Request (file descriptor 11): CONNECT yum.oracle.com:443 HTTP/1.1"
+
+5.5. Solidificar que o tráfego só pode sair do ProxyTest-2 através da proxy do ProxyTest-1
+Não interromper o comando "tail -f /var/log/tinyproxy.log"
+Editar novamente o /etc/yum.conf e comentar o proxy
+(...)
+#proxy=http://192.168.122.1:8888
+(...)
+Tentar instalar um pacote inofensivo
+# dnf install htop
+O install deverá falhar e nenhuma entrada adicional deverá aparecer no /var/log/tinyproxy.log.
+
+Usar a VM ProxyTest-1 como um router para o ProxyTest-2
+6.1 Configurar a Internal Network do ProxyTest-1 para ser a default gateway do ProxyTest-2
+Editar novamente o ficheiro /etc/sysconfig/network-scripts/ifcfg-enp0s3 no ProxyTest-2
+(...)
+GATEWAY=192.168.122.1
+(...)
+Reiniciar a máquina para executar o Network-script.
+# shutdown -r now
+
+6.2. Confirmar que o ProxyTest-1 está a ser usado como default gateway para o ProxyTest-2
+[root@privonet2 ~]# route -n
+Kernel IP routing table
+Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
+0.0.0.0         192.168.122.1   0.0.0.0         UG    100    0        0 enp0s3
+192.168.122.0   0.0.0.0         255.255.255.0   U     100    0        0 enp0s3
+
+6.3. Verificar também se o forwarding do Kernel está ativo (o resultado deverá ser 1)
+# cat /proc/sys/net/ipv4/ip_forward
+
+Caso não seja, editar o ficheiro /etc/sysctl.conf
+net.ipv4.ip_forward=1
+
+Depois aplicar as alterações na configuração
+# sysctl -p /etc/sysctl.conf
+
+6.4. Configurar o Firewalld para que aceite o redirecionamento de pacotes
+# firewall-cmd --permanent --direct --add-rule ipv4 nat POSTROUTING 0 -o enp0s3 -j MASQUERADE
+# firewall-cmd --permanent --direct --add-rule ipv4 filter FORWARD 0 -i enp0s8 -o enp0s3 -j ACCEPT
+# firewall-cmd --permanent --direct --add-rule ipv4 filter FORWARD 0 -i enp0s3 -o enp0s8 -m state --state RELATED,ESTABLISHED -j ACCEPT
+# firewall-cmd --reload
+
+DNS
+7.1. Instalar o BIND
+# dnf install bind
+
+7.2. Criar um backup do ficheiro de configuração do BIND
+# cp /etc/named.conf /etc/named.conf.bk
+
+7.3. Editar o ficheiro /etc/named.conf
+(...)
+options {
+        listen-on port 53 { 127.0.0.1; 192.168.122.1; 10.0.2.15; };
+        listen-on-v6 port 53 { ::1; };
+        directory       "/var/named";
+        dump-file       "/var/named/data/cache_dump.db";
+        statistics-file "/var/named/data/named_stats.txt";
+        memstatistics-file "/var/named/data/named_mem_stats.txt";
+        secroots-file   "/var/named/data/named.secroots";
+        recursing-file  "/var/named/data/named.recursing";
+        allow-query     { localhost; 192.168.122.2; };
+(...)
+
+7.4. Configurar o serviço do named
+# systemctl enable named
+# systemctl start named
+# systemctl status named
+O serviço named.service deverá estar active e enabled sem erros.
+
+7.5. Abrir a porta em que o named está à escuta
+# firewall-cmd --add-port=53/tcp --permanent
+# firewall-cmd --add-port=53/udp --permanent
+# firewall-cmd --reload
+
+7.6. No ProxyTest-2 alterar o nameserver no ficheiro /etc/resolv.conf
+nameserver 10.0.2.15
+nameserver 192.168.122.1
+
+7.7. Testar se o DNS está a resolver nomes
+# ping google.com
+# host google.com
+# dig example @10.0.2.15
+
+7.8. Reiniciar ambas as máquinas e garantir que a ligação entre as mesmas ainda se mantém.

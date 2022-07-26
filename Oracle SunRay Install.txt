@@ -1,0 +1,828 @@
+#!/bin/bash/
+
+Oracle Sunray
+
+Upload à imagem de instalação
+
+1.1. Obter o ISO do Oracle Linux 6.10
+
+1.2. Fazer upload à imagem de instalação do Oracle Linux 6.10 para o `QNAP/ISOs`
+
+Criação da VM
+
+2.1. Criar a VM com a seguintes opções
+
+```
+Name: PRDSRS1
+Compatibility: ESXi 6.7 virtual machine
+Guest OS family: Linux
+Guest OS version: Oracle Linux 6 (64-bit)
+Storage: QNAP
+
+Virtual Hardware
+>CPU - 2
+>Memory - 4096 MB
+>Hard Disk 1 - 36 GB
+>SCSI Controller 0 - VMware Paravirtual
+>Sata Controller 0
+>USB controller 1 - USB 2.0
+>Network Adapter 1 - VM Network
+>New Network Adapter - Sunray Network
+>CD/DVD Drive 1 - Datastore ISO file
+>Video Card - Default settings
+
+VM Options
+>Default
+```
+
+2.2. Selecionar o ISO de instalação do OL6.10 no diretório `QNAP/ISOs`
+
+Instalação do Oracle Linux 6.10
+
+3.1. Instalar o Oracle Linux 6.10
+
+```
+>Basic Storage Devices
+>Yes, discard any data
+
+Hostname
+>prdsrs1
+
+Network
+>Connect automatically
+>Address - 10.10.1.12
+>Netmask - 255.255.255.0
+>Gateway - 10.10.1.1
+>DNS - 10.10.1.3
+>Search - runlevel.pt
+>Options - timeout:1 attempts:1
+
+Timezone
+>Europe/Lisbon
+
+Layout
+>Use All Space
+
+Default Installation
+>Desktop - Customize Now
+>>>>Base System:
+        + Networking Tools
+        + Performance Tools
+>>>>Servers:
+        + CIFS File Server
+>>>>Development:
+        + Development Tools
+>>>>Desktops - General Purpose Desktop
+        - braseiro-nautilus-*
+        - cheese-*
+        - gnome-backgrounds-*
+        - gnome-bluetooth*
+        - rhythmbox-*
+        - sound-juicer-*
+        - totem-*
+>>>>Desktops - Graphical Administration Tools
+        + sabayon-*
+>>>>Desktops - Remote Desktop Clients
+        + freerdp-*
+        + rdesktop-*
+        + tsclient-*
+>>>>Languages
+        + Portuguese Support
+
+>No, I prefer to register at a later time.
+
+```
+
+3.2. Desativar os serviços desnecessários
+```
+# service NetworkManager stop; chkconfig NetworkManager off
+# service cups stop; chkconfig cups off
+```
+
+3.3. Adicionar o nome no /etc/hosts
+# vim /etc/hosts
+# 10.10.1.12  prdsrs1
+
+Preparação para a instalação do Sunray
+
+4.1. Enviar para o servidor os ficheiros de instalação
+```
+# scp /Users/jveloso/Downloads/srs_final.zip root@10.10.1.12:/root
+```
+
+4.2. Criar um repositório local com o cd de instalação
+```
+# mkdir /mnt/cdrom
+# mount -t iso9660 /dev/sr0 /mnt/cdrom/
+# cat > /etc/yum.repos.d/local.repo <<EOF
+[LocalRepo_Packages]
+name=LocalRepository_Packages
+baseurl=file:///mnt/cdrom/
+enabled=1
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-oracle
+EOF
+```
+
+4.3. Instalar dependências
+```
+# yum --disablerepo=* --enablerepo=Local* install compat-libstdc++-33.i686 glibc libgcc nss-softokn-freebl libstdc++
+```
+
+4.4. Instalar mais dependências
+```
+# yum --disablerepo=* --enablerepo=Local* install compat-openldap.x86_64 dhcp.x86_64 ksh.x86_64 openldap-clients.x86_64 tftp.x86_64 xinetd.x86_64 tcl.x86_64 tk.x86_64
+# yum --disablerepo=* --enablerepo=Local* install compat-openldap.i686 gdbm.i686 libusb.i686 libXcursor.i686 libXfixes.i686 libXinerama.i686 libXpm.i686 libXp.i686 libXpm.i686 libXtst.i686 libXtst.i686 libXv.i686 pam.i686 sssd-client.i686 openssl.i686 cyrus-sasl-lib.i686 libX11.i686 libXrender.i686 libXext.i686 libXau.i686 libXi.i686 audit-libs.i686 cracklib.i686 db4.i686 libselinux.i686 libcom_err.i686 krb5-libs.i686 zlib.i686 libxcb.i686 keyutils-libs.i686 openmotif.i686 libICE.i686 libSM.i686 libXft.i686 libXmu.i686 libXt.i686 libjpeg-turbo.i686 libpng.i686 libuuid.i686 fontconfig.i686 freetype.i686 expat.i686
+```
+
+4.5. Instalar dependências dentro do ficheiro de instalação
+```
+# unzip srs_final.zip
+# cd srs_final
+# yum install libfreetype.so.6 libz.so.1; rpm -ivh libXfont-1.5.1-2.el6.i686.rpm libfontenc-1.1.2-3.el6.i686.rpm
+```
+
+4.6. Instalar o gdm-multiseat
+```
+# cd srs_final/gdm-multiseat
+# wget https://public-yum.oracle.com/repo/OracleLinux/OL6/gdm_multiseat/x86_64/getPackage/ConsoleKit-multiseat-0.4.5.20120628-1.el6.x86_64.rpm
+# rpm -Uvh *
+```
+
+4.7. Reactivar o login root via GDM.
+```
+# vim /etc/pam.d/gdm
+
+#auth       required    pam_succeed_if.so user != root quiet
+```
+
+4.8. Reniciar a máquina no kernel RHEL, desinstalar os pacotes UEK R4
+```
+# rpm -qa | grep uek
+# rpm -e kernel-uek-firmware-4.1.12-124.16.4.el6uek.noarch kernel-uek-4.1.12-124.16.4.el6uek.x86_64
+```
+
+4.9 Instalar os pacotes UEK R3 e fazer um reboot
+```
+# cd srs_final/kernel
+# mkdir ext_depen
+# cd ext_depen
+# yum install libdtrace-ctf
+# wget https://yum.oracle.com/repo/OracleVM/OVM3/3x_latest/x86_64/getPackage/ql23xx-firmware-3.03.27-3.1.el6.noarch.rpm https://yum.oracle.com/repo/OracleVM/OVM3/3x_latest/x86_64/getPackage/ql2400-firmware-8.02.00-1.0.1.el6.noarch.rpm https://yum.oracle.com/repo/OracleVM/OVM3/3x_latest/x86_64/getPackage/ql2500-firmware-8.02.00-1.0.1.el6.noarch.rpm
+# rpm -ivh *
+# cd..
+# rpm -ivh *
+# shutdown -r now
+
+4.10. Remover os pacotes do OpenJDK e instalar a versão mais recente do Java
+```
+# rpm -e java-1.6.0-openjdk java-1.7.0-openjdk
+# ./jdk-6u211-linux-i586-rpm.bin
+```
+
+4.11. Ativar o Java Plugin do Firefox
+```
+# ln -s /usr/java/latest/jre/lib/amd64/libnpjp2.so /usr/lib64/mozilla/plugins/libnpjp2.so
+```
+
+4.12. Instalação do apache-tomcat
+```
+# tar zxvf apache-tomcat-6.0.53.tar.gz -C /opt
+# cd /opt
+# ln -s apache-tomcat-6.0.53 apache-tomcat
+```
+
+Configurações de Performance e Estabilidade
+
+5.1. Criar e editar o ficheiro /etc/dbus-1/system-local.conf
+```
+<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN"
+"http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig>
+  <!-- default for this is 2048 -->
+  <limit name="max_completed_connections">32768</limit>
+  <!-- default for this is 256 -->
+  <limit name="max_connections_per_user">4096</limit>
+</busconfig>
+```
+
+5.2. Editar o ficheiro /etc/X11/prefdm
+```
+#!/bin/sh
+
+PATH=/sbin:/usr/sbin:/bin:/usr/bin
+ulimit -n 16384
+```
+
+5.3. Prevenir sessões perdidas
+```
+# vim /etc/cron.daily/tmpwatch
+
+#! /bin/sh
+flags=-umcs # Added s for SUNWut
+/usr/sbin/tmpwatch "$flags" -x /tmp/.X11-unix -x /tmp/.XIM-unix \
+        -x /tmp/.font-unix -x /tmp/.ICE-unix -x /tmp/.Test-unix \
+        -x /tmp/SUNWut -X '/tmp/orbit-*' -X '/tmp/pulse-*' \ # Added options for SUNWut
+        -X '/tmp/hsperfdata_*' -X '/tmp/.hdb*lock' -X '/tmp/.sapstartsrv*.log' \
+        -X '/tmp/pymp-*' 10d /tmp
+/usr/sbin/tmpwatch "$flags" 30d /var/tmp
+for d in /var/{cache/man,catman}/{cat?,X11R6/cat?,local/cat?}; do
+    if [ -d "$d" ]; then
+        /usr/sbin/tmpwatch "$flags" -f 30d "$d"
+    fi
+done
+```
+
+5.4. Editar o PulseAudio Shared Memory
+```
+# vim /etc/pulse/client.conf
+shm-size-bytes = 131072
+```
+
+5.5. Desativar o SELinux
+```
+# vim /etc/selinux/config
+SELINUX=disabled
+```
+
+Instalação Sunray Software
+6.1. Instalação SROS
+```
+# unzip p25029006_111_Generic.zip
+# cd sros_11.1.7.0
+# ./utfwinstall
+```
+
+6.2. Instalação do Sunray Server
+```
+# unzip p25028977_54_Linux-x86-64.zip
+```
+
+6.3. Validação das dependências
+```
+# cd srs_5.4.5.0-Linux.i386/
+# ./utpkgcheck
+```
+
+6.4. Instalação
+```
+# ./utsetup
+
+==================================================================
+=== Installing Sun Ray Software - utinstall ===
+SOFTWARE LICENSE AGREEMENT
+...
+Accept? (Y/N) Y
+
+# utinstall-srss   Version: 4.5.4     Thu Aug 25 12:38:42 WAT 2016
+
+Sun Ray Server Software 4.5.4            not installed
+Sun Ray Data Store 3.5                   not installed
+Kiosk Mode 4.5                           not installed
+Enter Java v1.6 (or later) location: [/usr/java] /usr/java/jdk1.6.0_121
+
+Java path '/usr/java/jdk1.6.0_211'
+
+About to Install Sun Ray Server Software 4.5.4
+Continue? (Y/N) [Y] Y
+
+==================================================================
+=== Performing basic configuration - utconfig
+
+Activating product
+Product activation output being logged at /var/log/SUNWut/utctl.2016_08_25_12:40:06.log
+
+Configuration of Sun Ray Server Software
+
+This script automates the configuration of the Sun Ray Server Software
+and related software products.  Before proceeding, you should have read
+the Installation and Configuration Guide for planning purposes. For your
+convenience, default values (where applicable) are shown in brackets.
+Continue? (Y/N) [Y] Y
+
+Enter new UT admin password:  ********
+
+Again: Enter new UT admin password:  *******
+
+Configure Sun Ray Web Administration? (Y/N) [N] Y
+
+Enter Apache Tomcat installation directory [/opt/apache-tomcat]
+
+Enter HTTP port number [1660]
+
+Enable secure connections? (Y/N) [Y] Y
+
+Enter HTTPS port number [1661]
+
+Enter Tomcat process username [utwww]
+
+Enable remote server administration? (Y/N) [N] Y
+
+Configure Sun Ray Kiosk Mode? (Y/N) [N] Y
+
+Enter user prefix [utku]
+
+Enter group [utkiosk]
+
+Enter userID range start [150000]
+
+Enter number of users [25] 64
+
+Configure this server for a failover group? (Y/N) [N] N
+
+About to configure the following software products:
+
+Sun Ray Data Store 3.5
+    Hostname: prdsrs3v
+    Sun Ray root entry: o=utdata
+    Sun Ray root name: utdata
+    Sun Ray utdata admin password: (not shown)
+    SRDS 'rootdn': cn=admin,o=utdata
+
+Sun Ray Web Administration hosted at Apache Tomcat/6.0.45
+    Apache Tomcat installation directory: /opt/apache-tomcat
+    HTTP port number: 1660
+    HTTPS port number: 1661
+    Tomcat process username: utwww
+    Remote server administration: Enabled
+
+Sun Ray Server Software 4.5
+    Failover group: no
+    Sun Ray Kiosk Mode: yes
+
+Sun Ray Kiosk Mode 4.5
+  User name prefix:   utku
+  Base user ID:       150000
+  Number of accounts: 64
+  Kiosk group name:   utkiosk
+  Kiosk group ID:     auto
+Continue? (Y/N) [Y]
+
+Updating Sun Ray Data Store schema ...
+Updating Sun Ray Data Store ACL\'s ...
+Creating Sun Ray Data Store ...
+Restarting Sun Ray Data Store ...
+.
+Thu Aug 25 12:40 : utdsd starting
+
+Loading Sun Ray Data Store ...
+
+Executing '/usr/bin/ldapadd -h prdsrs3v -x -p 7012 -D cn=admin,o=utdata' ...
+
+Creating Sun Ray Server Software Configuration ...
+Adding user account for 'utwww' (ut admin web server user)
+done
+Sun Ray Web Administration enabled to start at system boot.
+Starting Sun Ray Web Administration...
+See /var/opt/SUNWut/log/utwebadmin.log for server logging information.
+
+Unique "/etc/opt/SUNWut/gmSignature" has been generated.
+
+Restarting Sun Ray Data Store ...
+.
+Thu Aug 25 12:40 : utdsd starting
+Adding user admin ...
+User(s) added successfully!
+
+Creating new Sun Ray Kiosk Mode configuration ...
+
+Validating new user ids.
+Validating new user accounts.
+Creating kiosk group utkiosk
+Configuring new kiosk user accounts:
+................................................................
+64 users configured
+
+***********************************************************
+The current policy has been modified.  You must restart the
+authentication manager to activate the changes.
+***********************************************************
+
+Enter groupname for Windows Connector [utwc]
+
+Enter group ID (gid) for the group [auto]
+
+Creating required LDAP schema ...
+Done.
+
+*****************************************************************************
+A restart of Sun Ray services is required before the Sun Ray Connector for
+Windows Operating Systems is used. Please run :
+
+           /opt/SUNWut/sbin/utstart
+
+Note that this will *NOT* terminate any sessions.
+*****************************************************************************
+
+Configuration of Sun Ray Server Software has completed.  Please check
+the log file, /var/log/SUNWut/utconfig.2016_08_25_12:40:06.log, for errors.
+
+==================================================================
+=== Configuring access policy - utpolicy
+Enter policy specification as if on utpolicy command line: [-a -g -z both -M] -a -m -r card -s card -c -g
+
+WARNING: -d option assumed on Linux
+
+The authentication manager must be restarted for changes to take effect.
+If a significant policy change has been made then a cold restart must be
+initiated with the following command, note that all existing sessions
+will be terminated:
+
+        /opt/SUNWut/sbin/utstart -c
+
+If a minor policy change was made then it is not necessary to terminate
+existing sessions and a warm restart is sufficient by executing the
+following command:
+
+        /opt/SUNWut/sbin/utstart
+
+==================================================================
+=== Configuring firmware downloads - utfwadm
+Do you want to configure Firmware downloads for Sun Ray clients? (Y/N) [Y] Y
+
+==================================================================
+Do you want to enable LAN access for Sun Ray clients at this time? (Y/N) [N] N
+```
+
+6.5. Instalação do Locale Português
+```
+# cd srs_final/srs_5.4.5.0-Linux.i386/
+# rpm -ivh Components/10-SRSS/Content/Kiosk_Mode_4.5/Linux/Packages/SUNWpkio-4.5-03.i386.rpm
+```
+
+6.6. Instalação dos Sunray Addons
+```
+# wget https://oss.oracle.com/~wcoekaer/srs-unsupported/SunRay-addons-0.1-1.noarch.rpm
+# rpm -ivh SunRay-addons-0.1-1.noarch.rpm
+```
+
+6.7. Editar o ficheiro /opt/SunRayAddons/bin/usbdrived
+```
+#Should the system create a usage README file? [yes/no]
+CREATEUSAGEFILE=no
+USAGEFILENAME="Attaching USB Drives to your Sun Ray README.txt"
+```
+
+6.8. Configuração Interconnect
+```
+# /opt/SUNWut/sbin/utadm -a eth1
+Accept as is? ([Y]/N): N
+new host address: [192.168.128.1] 10.10.6.1
+new netmask: [255.0.0.0] 255.255.255.0
+new host name: [prdsrs1-eth1]
+do you want to offer IP addresses for this interface? ([Y]/N): Y
+new first Sun Ray address: [10.10.6.16]
+number of Sun Ray addresses to allocate: [239] 64
+To read auth server list from file, enter file name:
+Auth server IP address (enter <CR> to end list):
+If no server in the auth server list responds,
+should an auth server be located by broadcasting on the network? ([Y]/N): Y
+new firmware server: [10.10.6.1]
+new router: [10.10.6.1]
+Selected values for interface "eth1"
+host address:       10.10.6.1
+net mask:           255.255.255.0
+net address:        10.10.6.0
+host name:          prdsrs1-eth1
+net name:           SunRay-eth1
+first unit address: 10.10.6.16
+last unit address:  10.10.6.79
+auth server list:   10.10.6.1
+firmware server:    10.10.6.1
+router:             10.10.6.1
+Accept as is? ([Y]/N): y
+DHCP is not currently running, should I start it? ([Y]/N): Y
+```
+
+6.9. Fazer patch ao Xnewt
+```
+# cp -p /opt/SUNWut/lib/Xnewt /opt/SUNWut/lib/Xnewt.bak
+# gunzip -c Xnewt.gz > /tmp/Xnewt
+# mv /tmp/Xnewt /opt/SUNWut/lib/Xnewt
+# chown root:bin /opt/SUNWut/lib/Xnewt
+# chmod +x /opt/SUNWut/lib/Xnewt
+```
+
+6.10. Confirmar as chaves
+```
+# /opt/SUNWut/sbin/utkeyadm -l
+# utkeyadm -a -c
+```
+
+Configurações Desktop
+7.1. Desligar Restart/Power Off no GDM
+```
+# gconftool-2 --direct --config-source xml:readwrite:/etc/gconf/gconf.xml.mandatory -t bool -s /apps/gdm/simple-greeter/disable_restart_buttons true
+```
+
+7.2. Cursores de Rato
+```
+# mv /usr/share/icons/dmz-aa/cursors /usr/share/icons/dmz-aa/cursors.disabled
+```
+
+7.3. Corrigir o erro "authentication is required to set network proxy..."
+```
+# vim /etc/xdg/autostart/gpk-update-icon.desktop
+#Added by DTI
+X-GNOME-Autostart-enabled=false
+```
+
+7.4. Wrapper rdesktop
+```
+# mv /usr/bin/rdesktop /usr/bin/rdesktop.bin
+# vim /usr/bin/rdesktop
+
+#!/bin/bash
+# rdesktop wrapper for uttsc
+# by mguerre 2016
+
+while getopts "u:d:g:a:PT:fp:n:r:x:" opt; do
+        case $opt in
+                u)      PARAMS="$PARAMS -u $OPTARG"
+                ;;
+                d)      PARAMS="$PARAMS -d $OPTARG"
+                ;;
+                g)      GEOMETRY="-g $OPTARG"
+                ;;
+                a)      PARAMS="$PARAMS -A $OPTARG"
+                ;;
+                P)
+                ;;
+                T)      PARAMS="$PARAMS -T $OPTARG"
+                ;;
+                f)      GEOMETRY="-m"
+                ;;
+                p)      PARAMS="$PARAMS -i"
+                ;;
+                n)      PARAMS="$PARAMS -n $OPTARG"
+                ;;
+                r)      if [ "$OPTARG" == "sound" ]; then
+                                PARAMS="$PARAMS -r sound:low"
+                        fi
+                ;;
+                x)
+                ;;
+        esac
+done
+shift $(($OPTIND - 1))
+uttsc $PARAMS $GEOMETRY -l pt-PT -f all -F all $1 <&0
+RETCODE=$?
+if [ $RETCODE -eq 250 ]; then exit 0; else exit $RETCODE; fi
+
+# chmod +x /usr/bin/rdesktop
+```
+
+Firewall
+8.1. Editar o ficheiro /etc/sysconfig/iptables
+```
+# Firewall configuration for Sunray Servers
+#
+*filter
+:INPUT ACCEPT [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+-A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+-A INPUT -p icmp -j ACCEPT
+-A INPUT -i lo -j ACCEPT
+########################
+# SSH only on eth0
+-A INPUT -i eth0 -m state --state NEW -m tcp -p tcp --dport 22 -j ACCEPT
+# Sunray Web GUI HTTPS
+-A INPUT -i eth0 -m state --state NEW -m tcp -p tcp --dport 1661 -j ACCEPT
+# DHCP for Sunray Clients (this can't really be blocked with iptables)
+-A INPUT -i eth1 -m state --state NEW -p udp --sport 66 --dport 67 -j ACCEPT
+# TFTP for Firmware Download
+-A INPUT -i eth1 -m state --state NEW -p udp --sport 4096:65535 --dport 69 -j ACCEPT
+# Syslog for event reporting
+-A INPUT -i eth1 -m state --state NEW -p udp --dport 514 -j ACCEPT
+# ALP-DISCOVERY (Sunray Server Discovery)
+-A INPUT -i eth1 -m state --state NEW -p udp --dport 7009 -j ACCEPT
+# ALP-AUTH /UTAUTHD (Presence, Control, Status)
+-A INPUT -i eth1 -m state --state NEW -m tcp -p tcp --sport 32768:65535 --dport 7009 -j ACCEPT
+# ALP-RENDER (On-Screen drawing, user input, audio)
+-A INPUT -i eth1 -m state --state NEW -p udp --sport 32768:65535 --dport 40000:42000 -j ACCEPT
+# ALP-AUDIO-IN (Inbound Audio)
+-A INPUT -i eth1 -m state --state NEW -p udp --sport 5498 --dport 40000:42000 -j ACCEPT
+# ALP-DEVMGR / UTDEVMGR (Device Management)
+-A INPUT -i eth1 -m state --state NEW -m tcp -p tcp --dport 7011 -j ACCEPT
+# UTRCMD (Remote Execution)
+-A INPUT -i eth1 -m state --state NEW -m tcp -p tcp --dport 7008 -j ACCEPT
+# UTAUTH-CB (Admin: control and status)
+-A INPUT -i eth1 -m state --state NEW -m tcp -p tcp --dport 7010 -j ACCEPT
+# UTDS (Data Store)
+-A INPUT -i eth1 -m state --state NEW -m tcp -p tcp --dport 7012 -j ACCEPT
+# UTSESSIOND (Session Members)
+-A INPUT -i eth1 -m state --state NEW -m tcp -p tcp --dport 7007 -j ACCEPT
+# UTDEVDATA
+-A INPUT -i eth1 -m state --state NEW -m tcp -p tcp --sport 32768:65535 --dport 40000:42000 -j ACCEPT
+########################
+-A INPUT -j REJECT --reject-with icmp-host-prohibited
+-A FORWARD -j REJECT --reject-with icmp-host-prohibited
+COMMIT
+
+# service iptables restart
+```
+
+Juntar o domínio de AD
+9.1. Instalar a adcli
+```
+#yum install adcli
+```
+
+9.2. Verificar se o domínio existe e fazer join
+# adcli info runlevel.pt
+[domain]
+domain-name = runlevel.pt
+domain-short = RUNLEVEL
+domain-forest = runlevel.pt
+domain-controller = prdnas1.runlevel.pt
+domain-controller-site = Default-First-Site-Name
+domain-controller-flags = pdc gc ldap ds kdc timeserv closest writable good-timeserv full-secret
+domain-controller-usable = yes
+domain-controllers = prdnas1.runlevel.pt
+[computer]
+computer-site = Default-First-Site-Name
+# adcli join runlevel.pt
+Password for Administrator@RUNLEVEL.PT:
+
+Configurar o sssd
+10.1. Criar o ficheiro /etc/sssd/sssd.conf
+```
+[sssd]
+config_file_version = 2
+domains = runlevel.pt
+services = nss, pam, ssh
+debug_level = 9
+
+[domain/runlevel.pt]
+id_provider = ad
+ad_server = prdnas1.runlevel.pt
+override_homedir = /home/%d/%u
+default_shell = /bin/bash
+debug_level = 9
+
+[nss]
+filter_groups = root
+filter_users = root
+reconnection_retries = 3
+entry_cache_timeout = 300
+
+[pam]
+reconnection_retries = 3
+offline_credentials_expiration = 2
+offline_failed_login_attempts = 3
+offline_failed_login_delay = 5
+```
+
+10.2. Alterar o modo do sssd.conf
+```
+# chmod 0600 /etc/sssd/sssd.conf
+```
+
+10.3. Fazer enable ao sssd
+```
+# authconfig --update --enablesssd --enablesssdauth
+```
+
+10.4. Iniciar o sssd
+```
+# service sssd start
+```
+
+10.5 Editar o ficheiro /etc/krb5.conf
+```
+# vim /etc/krb5.conf
+
+[logging]
+ default = FILE:/var/log/krb5libs.log
+ kdc = FILE:/var/log/krb5kdc.log
+ admin_server = FILE:/var/log/kadmind.log
+
+[libdefaults]
+ default_realm = RUNLEVEL.PT
+ dns_lookup_realm = true
+ dns_lookup_kdc = true
+ ticket_lifetime = 24h
+ renew_lifetime = 7d
+ forwardable = true
+
+[realms]
+ RUNLEVEL.PT = {
+  kdc = prdnas1.runlevel.pt
+  admin_server = prdnas1.runlevel.pt
+ }
+
+[domain_realm]
+ .runlevel.pt = RUNLEVEL.PT
+ runlevel.pt = RUNLEVEL.PT
+```
+
+10.6. Fazer com que o `home\` directory seja criado para users no primeiro login
+```
+# authconfig --enablemkhomedir --update
+```
+
+10.7. Ativar o serviço oddjob
+```
+service oddjob start
+```
+
+Conta root
+11.1. Remover os acessos da conta `root` tanto em ssh como através do `GDM`
+#/etc/pam.d/gdm
+
+auth       required    pam_succeed_if.so user != root quiet
+
+#/etc/ssh/sshd_config
+
+PermitRootLogin no
+
+Atualizar o sistema
+12.1. Criar um snapshot de VMware de segurança como preparação para o update.
+```
+Actions > Take snapshot
+Name: SunRay-Snap-20220303
+Description: Safety snapshot of the SunRay server.
+NAME="Oracle Linux Server"
+VERSION="6.10"
+ID="ol"
+VERSION_ID="6.10"
+PRETTY_NAME="Oracle Linux Server 6.10"
+ANSI_COLOR="0;31"
+CPE_NAME="cpe:/o:oracle:linux:6:10:server"
+HOME_URL="https://linux.oracle.com/"
+BUG_REPORT_URL="https://bugzilla.oracle.com/"
+
+ORACLE_BUGZILLA_PRODUCT="Oracle Linux 6"
+ORACLE_BUGZILLA_PRODUCT_VERSION=6.10
+ORACLE_SUPPORT_PRODUCT="Oracle Linux"
+ORACLE_SUPPORT_PRODUCT_VERSION=6.10
+```
+
+12.2. Fazer o update
+```
+yum check
+yum update --skip-broken
+shutdown -r now
+```
+
+OpenSSH
+13.1. Atualizar as dependências
+```
+yum install zlib-devel
+yum install libssh.x86_64
+
+13.2. Instalar uma versão mais atualizada do openssl
+wget --no-check-certificate https://www.openssl.org/source/openssl-1.1.1m.tar.gz
+gunzip openssl-1.1.1m.tar.gz
+tar -xvf openssl-1.1.1m.tar
+cd openssl-1.1.1m.tar
+./config --prefix=/opt/openssl --openssldir=/usr/local/ssl
+make install clean
+export LD_LIBRARY_PATH=/usr/local/lib:/usr/local/lib64; ldconfig
+
+13.3. Obter o openssh
+wget --no-check-certificate https://ftp.psnc.pl/pub/OpenBSD/OpenSSH/portable/openssh-8.9p1.tar.gz
+gunzip openssh-8.9p1.tar.gz
+tar -xvf openssh-8.9p1.tar
+
+13.4. Instalar o `pam-devel`
+yum install pam-devel
+
+13.4. Instalar o openssh
+cd openssh-8.9p1.tar
+# ./configure --prefix=/usr  --sysconfdir=/etc/ssh  --with-md5-passwords  --with-pam  --with-zlib --with-openssl-includes=/usr --with-privsep-path=/var/lib/sshd
+make install clean
+
+13.5. Corrigir o erro das `libs`
+echo "/usr/local/lib64" > /etc/ld.so.conf.d/openssl.conf
+ldconfig
+
+13.6. Criar uma cópia de segurança dos ficheiros de configuração chave do sshd, init.d e pam.d
+```
+mkdir open
+cp /etc/ssh/sshd_config ./open
+cp /etc/init.d/sshd.ini ./open
+cp /etc/pam.d/sshd.pam ./open
+```
+
+13.7. Remover o openssh antigo
+rpm -e --nodeps openssh-clients-5.3p1-124.el6_10.x86_64 openssh-askpass-5.3p1-124.el6_10.x86_64 openssh-5.3p1-124.el6_10.x86_64 openssh-server-5.3p1-124.el6_10.x86_64
+
+13.8. Colocar os ficheiros de configuração nos diretórios corretos
+```
+mv ./open/sshd_config /user/local/etc/sshd_config
+mv ./open/sshd.ini /etc/init.d/sshd
+mv ./open/sshd.pam /etc/pam.d/sshd
+```
+
+13.10. Verificar que o /etc/rc3.d/S89sshd existe
+```
+# ln -s /etc/init.d/sshd /etc/rc3.d/S89sshd
+```
+
+13.11. Adicionar o serviço ao boot através do chkconfig
+```
+# chkconfig --add sshd
+# chkconfig sshd on
+```

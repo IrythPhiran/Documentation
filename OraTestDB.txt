@@ -1,0 +1,215 @@
+Oracle Database Test
+
+Virtual Machine
+Hostname: OraTestDB
+Username: oracle
+IP: 10.0.2.20(NAT), 10.0.2.21(Host-Only Adapter)
+Ports abertos na configuração NAT
+sql: 127.0.0.1:1521, 10.0.2.15:1521
+ssh: 127.0.0.1:3333, 10.0.2.15:22
+
+Instalar a Oracle Database
+1.1. Atribuír um ip estático à interface net1(10.0.2.21 Host-Only Adapter)
+# dladm show-phys -m
+# ipadm create-ip net1
+# ipadm create-addr -T static -a local=10.0.2.16/24 net1
+
+1.2. Editar o ficheiro /etc/hosts
+::1 soltstdb localhost
+127.0.0.1 localhost loghost
+10.0.2.15       soltstdb
+10.0.2.16       soltstdb
+
+1.3. Obter a imagem de instalação oficial da Oracle Database 19c no site oficial e instalar as dependências necessárias
+# pkg install solaris-minimal-server
+# pkg install oracle-database-preinstall-19c
+# pkg install pkg:/group/prerequisite/oracle/oracle-rdbms-server-18c-preinstall@11.4-11.4.0.0.1.15.0
+
+Apesar de não ser obrigatório a documentação da Oracle aconselha que se instale o pacote solaris-minimal-server antes do oracle-database-preinstall-19c.
+
+1.4. Criar os grupos necessários manualmente caso o pkg oracle-database-preinstall-19c não os tenha criado.
+# groupadd -g 54321 oinstall
+# groupadd -g 54322 dba
+# groupadd -g 54323 oper
+# groupadd -g 54324 backupdba
+# groupadd -g 54325 dgdba
+# groupadd -g 54326 kmdba
+# groupadd -g 54327 asmdba
+# groupadd -g 54328 asmoper
+# groupadd -g 54329 asmadmin
+
+1.5. Criar o user "oracle" e adicionar aos grupos criados usando o grupo "oinstall" como primário
+# useradd -u 54321 -g oinstall -G dba,oper,backupdba,dgdba,kmdba,asmdba,asmoper,asmadmin -m -s /usr/bin/bash oracle
+Desbloquear a conta ao adicionar uma password
+# passwd oracle
+
+1.6. Criar os diretórios de instalação
+# mkdir -p /u01/app/oracle/product/19.5.0.0/dbhome_1
+# mkdir /dbinstall
+
+1.7. Atribuír a ownership à conta "oracle"
+# chown -R oracle:oinstall /u01 /export/home/oracle /dbinstall
+
+1.8. Garantir que o diretório /u01 tem as permissões corretas
+# chmod -R 775 /u01
+
+1.9. Alterar o Kernel max-shm-memory de forma a que não dê erro durante a instalação
+# id -p
+# projadd -p 54321 -U oracle -G dba,oinstall -K 'project.max-shm-memory=(priv,3g,deny)' user.oracle
+
+1.10. Enviar o ficheiro de instalação da OraDB19c para a VM
+# scp -P 3232 /Users/jveloso/Downloads/SOLARIS.X64_195000_db_home.zip oracle@127.0.0.1:/dbinstall
+
+1.11. Connectar à máquina com o user "oracle"
+# ssh -Y -p 3232 oracle@127.0.0.1
+Importante usar a flag "-Y" para permitir que o installer seja forwarded. (O uso da flag "-X" não permite editar os campos da instalação)
+
+1.12. Extrair o arquivo do ficheiro de instalação
+# unzip /dbinstall/SOLARIS.X64_195000_db_home.zip -d /u01/app/oracle/product/19.5.0.0/dbhome_1/
+
+1.13. Iniciar a instalação da Oracle Database
+# /u01/app/oracle/product/19.5.0.0/dbhome_1/runInstaller
+> Set Up Software Only
+> Single instance database installation
+> Standard Edition 2
+> /oracle/app/oracle
+> /oracle/app/oraInventory | dba
+> dba
+> Ignore All (O erro de swap será resolvido mais tarde)
+> Install
+
+A meio da instalação o installer irá fazer prompt para que os seguintes scripts sejam corridos como "root"
+# /oracle/app/oraInventory/orainstRoot.sh
+e
+# /export/home/oracle/OraDB19c/root.sh
+
+Para libertar espaço, após a instalação apagar o ficheiro .zip que estará a ocupar um total aproximado de 3GB na máquina virtual
+# rm SOLARIS.X64_195000_db_home.zip
+
+1.14. Fazer export ao diretório de instalação da Oracle Database ao editar o ficheiro /export/home/oracle/.profile
+export PATH=/usr/bin:/usr/sbin:/u01/app/oracle/product/19.5.0.0/dbhome_1/bin
+export ORACLE_HOME=/u01/app/oracle/product/19.5.0.0/dbhome_1
+export ORACLE_SID=orcl
+
+Criar uma Database
+2.1. Entrar no diretório /u01/app/oracle/product/19.5.0.0/dbhome_1/bin e executar o comando dbca
+# cd $ORACLE_HOME/bin
+# ./dbca
+
+2.2. Criar a Database
+> Create a Database
+> Advanced configuration
+> Oracle Single Instance database | General Purpose or Transaction Processing
+> orcl | untick "Create container database"
+> Use template file for database storage attributes
+> untick "Specify Fast Recovery Area"
+> tick "create a new listener" | LISTENER (1521)
+> Next | Yes
+> untick "Configure Enterprise Manager (EM) database express"
+> tick "Use the same administrative password for all accounts"
+> Next
+> Finish
+
+Ligar à Database
+3.1. Garantir que o LISTENER está ligado e à escuta na porta 1521
+# /u01/app/oracle/product/19.5.0.0/dbhome_1/bin/lsnrctl start LISTENER
+# netstat -a|grep 1521
+# telnet oratstdb 1521
+
+3.3. Iniciar a Database
+# sqlplus "/ as sysdba"
+#sql> startup
+#sql>@?/rdbms/admin/utlrp.sql
+
+3.4. Configurar a Database de forma a que a mesma inicie automáticamente com o sistema, começar por confirmar o valor no ficheiro /var/opt/oracle/oratab
+testdb:/u01/app/oracle/product/19.5.0.0/dbhome_1:Y
+
+3.5. Iniciar uma sessão como ROOT, mudar para o diretório /etc/init.d e criar o ficheiro dbora
+# cd /etc/init.d
+# touch dbora
+
+3.6. Editar o ficheiro /etc/init.d/dbora para o seguinte
+#! /bin/sh
+# description: Oracle auto start-stop script.
+#
+# Set ORACLE_HOME to be equivalent to the $ORACLE_HOME
+# from which you wish to execute dbstart and dbshut;
+#
+# Set ORA_OWNER to the user id of the owner of the
+# Oracle database in ORACLE_HOME.
+
+ORA_HOME=/u01/app/oracle/product/19.5.0.0/dbhome_1
+ORA_OWNER=oracle
+
+case "$1" in
+'start')
+    # Start the Oracle databases:
+    # The following command assumes that the oracle login
+    # will not prompt the user for any values
+    # Remove "&" if you don't want startup as a background process.
+    su - $ORA_OWNER -c "$ORA_HOME/bin/dbstart $ORA_HOME" &
+    touch /var/lock/subsys/dbora
+    ;;
+
+'stop')
+    # Stop the Oracle databases:
+    # The following command assumes that the oracle login
+    # will not prompt the user for any values
+    su - $ORA_OWNER -c "$ORA_HOME/bin/dbshut $ORA_HOME" &
+    rm -f /var/lock/subsys/dbora
+    ;;
+esac
+
+3.7. Alterar a ownership e permissões do ficheiro /etc/init.d/dbora
+# chgrp dba dbora
+# chmod 750 dbora
+
+3.8. Criar Symbolic Links nos diretórios corretos para os runlevels do sistema operativo
+# ln -s /etc/init.d/dbora /etc/rc0.d/K01dbora
+# ln -s /etc/init.d/dbora /etc/rc3.d/S99dbora
+
+3.9. Reiniciar o sistema para confirmar se a Database inicia automáticamente
+# init 6
+
+SQL Developer
+4.1. Ligar à database via SQL Developer
+name: oratstdb
+username: system
+password: ********
+hostname: 127.0.0.1
+port: 1521
+SID: testdb
+
+Novo Schema
+4.2. Criar um novo utilizador
+CREATE USER jveloso IDENTIFIED BY oltest11;
+
+4.3. Atribuír privilégios ao utilizador
+GRANT CREATE TABLE TO jveloso;
+GRANT CONNECT TO jveloso;
+GRANT UNLIMITED TABLESPACE TO jveloso;
+
+4.4. Gravar as alterações
+commit
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+############################################
+https://www.youtube.com/watch?v=ywJajzN9NhQ
+https://mufalani.wordpress.com/2020/03/06/installing-oracle-19c-solaris-sparc-64/
+https://learncodeshare.net/2015/05/01/configure-host-access-to-an-oracle-database-on-a-virtualbox-vm/

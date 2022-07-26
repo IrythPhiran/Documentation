@@ -1,0 +1,743 @@
+OpenBSD 5.7 Setup
+
+1.1. Instalar o OpenBSD 5.7 para a máquina IBOPRP01V
+```
+>Install
+>(Keyboard)PT
+>(Hostname)openfish
+>em0
+  >dhcp
+  >none
+  >192.168.56.8
+>(ssh)yes
+>(ntpd)no
+>(X server)no
+>(xdm)no
+>(user)jveloso
+>(disable `root` ssh)yes
+>(timezone)Europe/Lisbon
+>(disk)wd0
+>(use DUID)yes
+>Whole (disk)
+>(layout)auto
+>(Install)http
+>(proxy)none
+>(HTTP Server)ftp.nluug.nl
+>(pathname)[5.7/amd64]
+  >+b*
+  >-x* -g*
+>done
+# reboot
+```
+1.2. Adicionar repositório com pacotes
+```
+# pkg_add ftp://ftp.openbsd.org/pub/OpenBSD/5.7/packages/&lt;arch&gt;/&lt;package-name&gt;
+```
+1.3. Configurar o /etc/pf.conf (Packet Filter)
+```
+#       $OpenBSD: pf.conf,v 1.49 2009/09/17 06:39:03 jmc Exp $
+#
+# See pf.conf(5) for syntax and examples.
+# Remember to set net.inet.ip.forwarding=1 and/or net.inet6.ip6.forwarding=1
+# in /etc/sysctl.conf if packets are to be forwarded between interfaces.
+
+set skip on lo
+
+# filter rules and anchor for ftp-proxy(8)
+#anchor "ftp-proxy/*"
+#pass in quick proto tcp to port ftp rdr-to 127.0.0.1 port 8021
+
+# anchor for relayd(8)
+#anchor "relayd/*"
+
+pass            # to establish keep-state
+
+# rules for spamd(8)
+#table <spamd-white> persist
+#table <nospamd> persist file "/etc/mail/nospamd"
+#pass in on egress proto tcp from any to any port smtp \
+#    rdr-to 127.0.0.1 port spamd
+#pass in on egress proto tcp from <nospamd> to any port smtp
+#pass in log on egress proto tcp from <spamd-white> to any port smtp
+pass out log on egress proto tcp to any port smtp
+pass in on em0 proto tcp from any to any port smtp
+
+# IMAPs
+#pass in on em0 inet proto tcp from any to any port 443 rdr-to 172.19.1.110
+pass in on em0 proto tcp from any to egress port 443 rdr-to 172.19.1.110
+#pass out on em0 inet proto tcp from any to 172.19.1.110 port 443 received-on em0 nat-to 172.18.1.10
+pass out on em0 proto tcp to 172.19.1.110 port 443 received-on em0 nat-to 172.18.1.10
+
+#block in quick from urpf-failed to any # use with care
+
+# By default, do not permit remote connections to X11
+block in on ! lo0 proto tcp to port 6000:6010
+```
+# pfctl -d
+# pfctl -e
+```
+1.4. Instalar o wget
+```
+pkg_add wget
+```
+1.5. Obter o pacote de instalação fonte do openssl
+```
+mkdir openssl
+cd openssl
+# wget --no-check-certificate https://www.openssl.org/source/old/1.0.1/openssl-1.0.1u.tar.gz
+```
+1.6. Extraír os ficheiros do openssl
+```
+gunzip openssl-1.0.1u.tar.gz
+tar xvf openssl-1.0.1u.tar
+```
+1.7. Instalar o openssl
+```
+# cd openssl-1.0.1
+# ./Configure
+# make
+# make test
+# make install clean
+```
+1.8. Instalar o software Git
+```
+# pkg_add git
+```
+1.9. Obter o pacote de instalação fonte do Pound
+```
+# mkdir pound
+# cd pound
+# git clone https://github.com/lkundrak/Pound.git
+```
+1.10. Instalar o Pound
+```
+# cd Pound
+# ./Configure
+# make install clean
+```
+1.11. Enviar para o servidor o ficheiro de configuração custom do `Pound`
+```
+# scp -P 3027 /Users/jveloso/Downloads/pound.cfg jveloso@127.0.0.1:/home/jveloso
+```
+1.12. Mover o ficheiro pound.cfg para o diretório apropriado.
+```
+# mv /home/jveloso/pound.cfg /usr/local/etc
+```
+1.13. Criar um certificado `.pem`
+```
+# openssl genrsa -des3 -out domain.key 2048
+# openssl req -key domain.key -new -out domain.csr
+# openssl req -newkey rsa:2048 -keyout domain.key -out domain.csr
+# openssl req -newkey rsa:2048 -nodes -keyout domain.key -out domain.csr
+# openssl x509 -signkey domain.key -in domain.csr -req -days 365 -out domain.crt
+# cat domain.key domain.crt > /etc/pound/private.pem
+```
+1.14. Editar o ficheiro de configuração do pound (`/usr/local/etc/pound.cfg`)
+```
+# Global Directives
+User "proxy"
+Group "proxy"
+# RootJail /var/empty
+#Server 3
+LogLevel 2
+#DHParams "/etc/pound/dh2048.pem"
+#ECDHCurve prime256v1
+
+ListenHTTP
+    Address 192.168.56.8
+    Port 80
+    MaxRequest 1024
+    xHTTP 0
+    #Service
+    #    HeadRequire "(Host: helpdesk1.interbancos.co.mz)"
+    #    Redirect "https://helpdesk1.interbancos.co.mz"
+    #End
+    Service
+        HeadRequire "(Host: ponto24net.co.mz|Host: www.ponto24net.co.mz|Host: ponto24.co.mz)"
+        Redirect "https://www.ponto24.co.mz"
+    End
+    Service
+        HeadRequire "(Host: portal.ponto24net.co.mz|Host: portal.ponto24.co.mz)"
+        Redirect "https://portal.ponto24.co.mz"
+    End
+    Service
+        Redirect "https://www.ponto24.co.mz"
+    End
+End
+
+
+ListenHTTPS
+    Address 192.168.56.8
+    Port 443
+    #Cert "/etc/ssl/thawte_cert_2.pem"
+    #Cert "/etc/ssl/new_20150522/bundle_20150619.crt"
+    #Cert "/etc/ssl/new_20150522/bundle_20150619.pem"
+    Cert "/etc/pound/private.pem"
+    SSLAllowClientRenegotiation 0
+    SSLHonorCipherOrder 1
+    Disable TLSv1_1
+
+    #Ciphers         "ECDHE-RSA-AES256-SHA384:AES256-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH:!AESGCM"
+    #Ciphers         "RC4-SHA:HIGH:!ADH:!SSLv2:!AES"
+    #Ciphers "ECDH+AESGCM:DH+AESGCM:ECDH+AES256:DH+AES256:ECDH+AES128:DH+AES:ECDH+3DES:DH+3DES:RSA+AESGCM:RSA+AES:RSA+3DES:!aNULL:!MD5:!DSS:!SSLv3:!SSLv2:!EXPORT"
+    #Ciphers "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-RC4-SHA:ECDHE-RSA-AES128-SHA:RC4:HIGH:!MD5:!aNULL:!EDH"
+    # 20150519 WORKING Grade B Ciphers "EECDH+ECDSA+AESGCM:EECDH+aRSA+AESGCM:EECDH+ECDSA+SHA384:EECDH+ECDSA+SHA256:EECDH+aRSA+SHA384:EECDH+aRSA+SHA256:EECDH:EDH+aRSA:-RC4:EECDH+aRSA+RC4:EECDH+RC4:EDH+aRSA+RC4:!aNULL:!eNULL:!LOW:!3DES:!MD5:!EXP:!PSK:!SRP:!DSS:RC4+SHA"
+    Ciphers "EECDH+ECDSA+AESGCM:EECDH+aRSA+AESGCM:EECDH+ECDSA+SHA384:EECDH+ECDSA+SHA256:EECDH+aRSA+SHA384:EECDH+aRSA+SHA256:EECDH:EDH+aRSA:!RC4:!aNULL:!eNULL:!LOW:!3DES:!MD5:!EXP:!PSK:!SRP:!DSS"
+    # FROM SITE Ciphers "EECDH+ECDSA+AESGCM EECDH+aRSA+AESGCM EECDH+ECDSA+SHA384 EECDH+ECDSA+SHA256 EECDH+aRSA+SHA384 EECDH+aRSA+SHA256 EECDH+aRSA+RC4 EECDH EDH+aRSA RC4 !aNULL !eNULL !LOW !3DES !MD5 !EXP !PSK !SRP !DSS !RC4"
+    #Ciphers "EECDH+ECDSA+AESGCM:EECDH+aRSA+AESGCM:EECDH+ECDSA+SHA384:EECDH+ECDSA+SHA256:EECDH+aRSA+SHA384:EECDH+aRSA+SHA256:EECDH+aRSA+RC4:EECDH:EDH+aRSA:RC4:!aNULL:!eNULL:!LOW:!3DES:!MD5:!EXP:!PSK:!SRP:!DSS:+RC4:RC4"
+
+    MaxRequest 1024
+    xHTTP 0
+
+
+    Service
+        Url "/phpMyAdmin.*"
+    End
+    Service
+        Url "/probe.*"
+    End
+    Service
+        HeadRequire "(Host: ponto24net.co.mz|Host: www.ponto24net.co.mz)"
+        Redirect "https://www.ponto24.co.mz"
+    End
+    Service
+        HeadRequire "(Host: ponto24.co.mz|Host: www.ponto24.co.mz|Host: interbancos.co.mz|Host: www.interbancos.co.mz)"
+        BackEnd
+            #AddressdRequire "(Host: p 172.18.1.130
+            #Port 8000
+            #Address 172.19.1.131
+            #Port 8080
+            Address 172.18.1.131
+            Port 6081
+        End
+    End
+########## Service for intranet ################################################################
+    #Service
+    #    HeadRequire "(Host: helpdesk1.interbancos.co.mz)"
+    #    BackEnd
+    #        Address 192.168.210.231
+    #        Port 80
+#           Timeout 500
+ #           Priority 5
+ #       End
+ #   End
+########## EOF Service for intranet ################################################################
+
+########## Service for portal ################################################################
+    Service
+        HeadRequire "(Host: portal.ponto24net.co.mz)"
+        Redirect "https://portal.ponto24.co.mz"
+    End
+    Service
+        HeadRequire "(Host: portal.ponto24.co.mz)"
+        BackEnd
+            Address 172.19.1.131
+            Port 8080
+        End
+    End
+########## EOF Service for portal ################################################################
+
+########## Service for servicos ################################################################
+    Service
+        HeadRequire "(Host: servicos.ponto24net.co.mz)"
+        Redirect "https://servicos.ponto24.co.mz"
+    End
+    Service
+        HeadRequire "(Host: servicos.ponto24.co.mz)"
+        BackEnd
+            Address 172.18.1.131
+            Port 8001
+        End
+    End
+########## EOF Service for servicos ################################################################
+
+########## Catch all Service  ################################################################
+    Service
+        Redirect "https://www.ponto24.co.mz"
+    End
+########## EOF Catch all Service  ################################################################
+End
+```
+1.15. Iniciar o `pound`
+```
+# /usr/local/sbin/pound
+```
+
+OpenBSD 5.7 to 7.0 upgrade
+2.1. Fazer mount na VM ao cd de instalação da versão 5.8
+2.2. Fazer `boot` para o kernel bsd.rd e selecionar a opção `upgrade`
+>pt
+>wd0
+>wd0a
+>(Check)yes
+>(cd)cd0
+>(pathname)[5.8/amd64]
+>-x* -g*
+>+b*
+>(SHA256.sig)yes
+>done
+# reboot
+(Remover a imagem de instalação antes do novo boot)
+2.3. Correr o comando `sysmerge`
+```
+#sysmerge
+```
+2.4. Remover e mover ficheiros de sistema
+```
+# rm -f /usr/bin/sudo /usr/bin/sudoedit /usr/sbin/visudo
+# rm -f /usr/share/man/man8/sudo.8 /usr/share/man/man8/sudoedit.8
+# rm -f /usr/share/man/man8/visudo.8 /usr/share/man/man5/sudoers.5
+# rm -f /usr/libexec/sudo_noexec.so
+```
+2.5. Correr um update local
+```
+#pkg_add -u
+```
+2.6. Fazer mount na VM ao cd de instalação da versão 5.9
+2.7. Fazer `boot` para o kernel bsd.rd e selecionar a opção `upgrade`
+>pt
+>wd0
+>wd0a
+>(Check)yes
+>(cd)cd0
+>(pathname)[5.9/amd64]
+>-x* -g*
+>+b*
+>(SHA256.sig)yes
+>done
+# reboot
+(Remover a imagem de instalação antes do novo boot)
+2.8. Correr o comando `sysmerge`
+```
+# sysmerge
+```
+2.9 Remover e mover ficheiros de sistema
+```
+rm -f /usr/libexec/smtpd/makemap
+rm -f /usr/libexec/smtpd/table-ldap
+rm -f /usr/libexec/smtpd/table-passwd
+rm -f /usr/libexec/smtpd/table-sqlite
+rm -f /usr/share/man/man5/table_passwd.5
+rm -f /usr/share/misc/termcap.db /usr/share/misc/terminfo.db
+rm -f /usr/X11R6/include/intel_*.h
+rm -f /usr/X11R6/include/r600_pci_ids.h
+rm -f /usr/X11R6/include/radeon_*.h
+rm -f /usr/include/malloc.h
+rm -f /usr/libexec/auth/login_tis
+rm -f /etc/rc.d/yppasswdd /usr/sbin/rpc.yppasswdd
+```
+2.10. Correr um update local
+```
+#pkg_add -u
+```
+2.11. Limpar o diretório `/usr/share/man`
+```
+# rm -rf /usr/share/man
+```
+2.12. Fazer mount na VM ao cd de instalação da versão 6.0
+2.13. Fazer `boot` para o kernel bsd.rd e selecionar a opção `upgrade`
+>pt
+>wd0
+>wd0a
+>(Check)yes
+>(cd)cd0
+>(pathname)[6.0/amd64]
+>-x* -g*
+>+b*
+>(SHA256.sig)yes
+>done
+# reboot
+(Remover a imagem de instalação antes do novo boot)
+2.14. Correr o comando `sysmerge`
+```
+# sysmerge
+```
+2.15. Re-compilar o Pound
+```
+# ./Configure
+# make install clean
+```
+2.16. Limpar o diretório `/usr/share/man`
+```
+# rm -rf /usr/share/man
+```
+2.17. Fazer mount na VM ao cd de instalação da versão 6.1
+2.18. Fazer `boot` para o kernel bsd.rd e selecionar a opção `upgrade`
+>pt
+>wd0
+>wd0a
+>(Check)yes
+>(cd)cd0
+>(pathname)[6.1/amd64]
+>-x* -g*
+>+b*
+>(SHA256.sig)yes
+>done
+# reboot
+(Remover a imagem de instalação antes do novo boot)
+2.19. Correr o comando `sysmerge`
+```
+# sysmerge
+```
+2.20 Criar o ficheiro `/etc/installurl`
+```
+echo 'https://example/pub/OpenBSD' > /etc/installurl
+```
+2.21. Remover o `/etc/pkg.conf`
+```
+# rm /etc/pkg.conf
+```
+2.22. Remover o pacote de perl
+```
+# rm -rf /usr/libdata/perl5/site_perl \
+#/usr/bin/perl5* \
+#/usr/lib/libperl.so.17.* \
+#/usr/libdata/perl5/*-openbsd/5.*/ \
+#/usr/bin/a2p \
+#/usr/bin/config_data \
+#/usr/bin/find2perl \
+#/usr/bin/psed \
+#/usr/bin/s2p \
+#/usr/libdata/perl5/CGI* \
+#/usr/libdata/perl5/Locale/Codes/Constants.pod \
+#/usr/libdata/perl5/Module/Build* \
+#/usr/libdata/perl5/Package \
+#/usr/libdata/perl5/inc \
+#/usr/libdata/perl5/pod/a2p.pod \
+#/usr/libdata/perl5/unicore/lib/Gc/Lt.pl \
+#/usr/libdata/perl5/unicore/lib/Hyphen/Y.pl \
+#/usr/libdata/perl5/unicore/lib/LOE \
+#/usr/libdata/perl5/unicore/lib/NChar \
+#/usr/libdata/perl5/unicore/lib/PatWS \
+#/usr/libdata/perl5/unicore/lib/Perl/_XExtend.pl \
+#/usr/libdata/perl5/unicore/lib/Perl/_XRegula.pl \
+#/usr/libdata/perl5/unicore/lib/Perl/_XSpecia.pl \
+#/usr/libdata/perl5/unicore/lib/Space \
+#/usr/libdata/perl5/version/vpp.pm
+```
+2.23. Remover os dispositivos de som que não irão ser usados
+```
+# rm -f /dev/sound*
+```
+2.24. Fazer a manutenção de pré-upgrade (6.2)
+```
+# rm -rf /usr/share/man
+# fc -ln 1 | cut -f2- > ~/ksh_hist.txt
+# chgrp -R crontab /var/cron/atjobs
+```
+2.25. Fazer mount na VM ao cd de instalação da versão 6.2
+2.26. Fazer `boot` para o kernel bsd.rd e selecionar a opção `upgrade`
+>pt
+>wd0
+>wd0a
+>(Check)yes
+>(cd)cd0
+>(pathname)[6.2/amd64]
+>-x* -g*
+>(SHA256.sig)yes
+>done
+# reboot
+(Remover a imagem de instalação antes do novo boot)
+```
+2.27. Correr o comando `sysmerge`
+```
+# sysmerge
+```
+2.28. Fazer um update local
+```
+# pkg_add -u
+```
+2.29. Fazer a manutenção do pré-upgrade (6.3)
+```
+# rm -r /usr/share/man
+# rm -r /usr/share/compile
+2.30. Fazer mount na VM ao cd de instalação da versão 6.3
+2.31. Fazer `boot` para o kernel bsd.rd e selecionar a opção `upgrade`
+>pt
+>wd0
+>wd0a
+>(Check)yes
+>(cd)cd0
+>(pathname)[6.3/amd64]
+>-x* -g*
+>(SHA256.sig)yes
+>done
+# reboot
+(Remover a imagem de instalação antes do novo boot)
+2.33. Correr o comando `sysmerge`
+```
+# sysmerge
+```
+2.34. Fazer um update local
+```
+# pkg_add -u
+```
+2.35. Fazer mount na VM ao cd de instalação da versão 6.4
+2.36. Fazer `boot` para o kernel bsd.rd e selecionar a opção `upgrade`
+>pt
+>wd0
+>wd0a
+>(Check)yes
+>(cd)cd0
+>(pathname)[6.4/amd64]
+>-x* -g*
+>(SHA256.sig)yes
+>done
+# reboot
+```
+(Remover a imagem de instalação antes do novo boot)
+2.37. Correr o comando `sysmerge`
+```
+# sysmerge
+```
+2.38. Fazer um update local
+```
+# pkg_add -u
+```
+2.39. Fazer a manutenção pós-upgrade (6.*)
+```
+# rm /dev/audio /dev/audioctl
+# rm /etc/rc.d/rtadvd /usr/sbin/rtadvd /usr/share/man/man5/rtadvd.conf.5 /usr/share/man/man8/rtadvd.8
+# userdel _rtadvd
+# groupdel _rtadvd
+```
+2.40. Fazer a manutenção de pré-upgrade (6.5)
+```
+# echo "vm.malloc_conf=CF" >> /etc/sysctl.conf
+```
+2.41. Fazer mount na VM ao cd de instalação da versão 6.5
+2.42. Fazer `boot` para o kernel bsd.rd e selecionar a opção `upgrade`
+>pt
+>wd0
+>wd0a
+>(Check)yes
+>(cd)cd0
+>(pathname)[6.5/amd64]
+>-x* -g*
+>(SHA256.sig)yes
+>done
+# reboot
+(Remover a imagem de instalação antes do novo boot)
+2.43. Correr o comando `sysmerge`
+```
+# sysmerge
+```
+2.44. Fazer um update local
+```
+# pkg_add -u
+```
+2.45. Fazer a manutenção pós-upgrade (6.5)
+```
+# rm /usr/include/openssl/asn1_mac.h
+# rm /usr/bin/c2ph \
+# /usr/bin/pstruct \
+# /usr/libdata/perl5/Locale/Codes/API.pod \
+# /usr/libdata/perl5/Module/CoreList/TieHashDelta.pm \
+# /usr/libdata/perl5/Unicode/Collate/Locale/bg.pl \
+# /usr/libdata/perl5/Unicode/Collate/Locale/fr.pl \
+# /usr/libdata/perl5/Unicode/Collate/Locale/ru.pl \
+# /usr/libdata/perl5/unicore/lib/Sc/Cham.pl \
+# /usr/libdata/perl5/unicore/lib/Sc/Ethi.pl \
+# /usr/libdata/perl5/unicore/lib/Sc/Hebr.pl \
+# /usr/libdata/perl5/unicore/lib/Sc/Hmng.pl \
+# /usr/libdata/perl5/unicore/lib/Sc/Khar.pl \
+# /usr/libdata/perl5/unicore/lib/Sc/Khmr.pl \
+# /usr/libdata/perl5/unicore/lib/Sc/Lana.pl \
+# /usr/libdata/perl5/unicore/lib/Sc/Lao.pl \
+# /usr/libdata/perl5/unicore/lib/Sc/Talu.pl \
+# /usr/libdata/perl5/unicore/lib/Sc/Tibt.pl \
+# /usr/libdata/perl5/unicore/lib/Sc/Xsux.pl \
+# /usr/libdata/perl5/unicore/lib/Sc/Zzzz.pl \
+# /usr/share/man/man1/c2ph.1 \
+# /usr/share/man/man1/pstruct.1 \
+# /usr/share/man/man3p/Locale::Codes::API.3p
+```
+2.46. Fazer mount na VM ao cd de instalação da versão 6.6
+2.47. Fazer `boot` para o kernel bsd.rd e selecionar a opção `upgrade`
+>pt
+>wd0
+>wd0a
+>(Check)yes
+>(cd)cd0
+>(pathname)[6.6/amd64]
+>-x* -g*
+>(SHA256.sig)yes
+>done
+# reboot
+(Remover a imagem de instalação antes do novo boot)
+2.48. Correr o comando `sysmerge`
+```
+# sysmerge
+```
+2.49. Fazer um update local
+```
+# pkg_add -u
+```
+2.50. Fazer a manutenção pós-upgrade (6.6)
+```
+# rm -f /usr/share/man/man3p/carp.3p \
+#         /usr/share/man/man3p/Tie::ExtraHash.3p \
+#         /usr/share/man/man3p/Tie::StdHash.3p \
+#         /usr/share/man/man3p/Tie::StdScalar.3p \
+#         /usr/share/man/man3p/basename.3p \
+#         /usr/share/man/man3p/cluck.3p \
+#         /usr/share/man/man3p/confess.3p \
+#         /usr/share/man/man3p/croak.3p \
+#         /usr/share/man/man3p/dirname.3p \
+#         /usr/share/man/man3p/fileparse.3p \
+#         /usr/share/man/man3p/getopt.3p \
+#         /usr/share/man/man3p/getopts.3p \
+#         /usr/share/man/man3p/inet_aton.3p \
+#         /usr/share/man/man3p/inet_ntoa.3p \
+#         /usr/share/man/man3p/longmess.3p \
+#         /usr/share/man/man3p/look.3p \
+#         /usr/share/man/man3p/open2.3p \
+#         /usr/share/man/man3p/open3.3p \
+#         /usr/share/man/man3p/pod2usage.3p \
+#         /usr/share/man/man3p/podchecker.3p \
+#         /usr/share/man/man3p/podselect.3p \
+#         /usr/share/man/man3p/shortmess.3p \
+#         /usr/share/man/man3p/sockaddr_in.3p \
+#         /usr/share/man/man3p/sockaddr_un.3p \
+#         /usr/share/man/man3p/writemain.3p
+
+# rm -f /usr/sbin/snmpctl \
+#         /usr/share/man/man8/snmpctl.8
+
+# rm -f /usr/X11R6/lib/pkgconfig/libfs.pc \
+#         /usr/X11R6/include/X11/fonts/FSlib.h
+# rm -rf  /usr/X11R6/share/doc/libFS
+
+# rm -f /usr/X11R6/bin/xman \
+#         /usr/X11R6/lib/X11/xman.help \
+#         /usr/X11R6/man/man1/xman.1 \
+#         /usr/X11R6/share/X11/app-defaults/Xman
+
+# rm -f /usr/X11R6/lib/pkgconfig/libfs.pc \
+#         /usr/X11R6/lib/modules/v10002d.uc \
+#         /usr/X11R6/lib/modules/v20002d.uc \
+#         /usr/X11R6/lib/modules/drivers/ark_drv.la \
+#         /usr/X11R6/lib/modules/drivers/ark_drv.so \
+#         /usr/X11R6/lib/modules/drivers/chips_drv.la \
+#         /usr/X11R6/lib/modules/drivers/chips_drv.so \
+#         /usr/X11R6/lib/modules/drivers/glint_drv.la \
+#         /usr/X11R6/lib/modules/drivers/glint_drv.so \
+#         /usr/X11R6/lib/modules/drivers/i128_drv.la \
+#         /usr/X11R6/lib/modules/drivers/i128_drv.so \
+#         /usr/X11R6/lib/modules/drivers/neomagic_drv.la \
+#         /usr/X11R6/lib/modules/drivers/neomagic_drv.so \
+#         /usr/X11R6/lib/modules/drivers/rendition_drv.la \
+#         /usr/X11R6/lib/modules/drivers/rendition_drv.so \
+#         /usr/X11R6/lib/modules/drivers/s3_drv.la \
+#         /usr/X11R6/lib/modules/drivers/s3_drv.so \
+#         /usr/X11R6/lib/modules/drivers/s3virge_drv.la \
+#         /usr/X11R6/lib/modules/drivers/s3virge_drv.so \
+#         /usr/X11R6/lib/modules/drivers/sis_drv.la \
+#         /usr/X11R6/lib/modules/drivers/sis_drv.so \
+#         /usr/X11R6/lib/modules/drivers/tdfx_drv.la \
+#         /usr/X11R6/lib/modules/drivers/tdfx_drv.so \
+#         /usr/X11R6/lib/modules/drivers/trident_drv.la \
+#         /usr/X11R6/lib/modules/drivers/trident_drv.so \
+#         /usr/X11R6/lib/modules/drivers/tseng_drv.la \
+#         /usr/X11R6/lib/modules/drivers/tseng_drv.so \
+#         /usr/X11R6/man/man4/chips.4 \
+#         /usr/X11R6/man/man4/glint.4 \
+#         /usr/X11R6/man/man4/i128.4 \
+#         /usr/X11R6/man/man4/neomagic.4 \
+#         /usr/X11R6/man/man4/rendition.4 \
+#         /usr/X11R6/man/man4/s3.4 \
+#         /usr/X11R6/man/man4/s3virge.4 \
+#         /usr/X11R6/man/man4/sis.4 \
+#         /usr/X11R6/man/man4/tdfx.4 \
+#         /usr/X11R6/man/man4/trident.4 \
+#         /usr/X11R6/man/man4/tseng.4 \
+#         /usr/X11R6/man/man3/XkbAllocGeomOverlayKey.3
+
+# rm -f /usr/X11R6/include/X11/fonts/FSlib.h \
+#         /usr/include/dev/ic/dwc_gmac_reg.h \
+#         /usr/include/dev/ic/dwc_gmac_var.h \
+#         /usr/include/llvm/Analysis/IndirectCallSiteVisitor.h \
+#         /usr/include/llvm/CodeGen/GCs.h \
+#         /usr/include/llvm/DebugInfo/PDB/Native/NativeBuiltinSymbol.h \
+#         /usr/include/llvm/DebugInfo/PDB/Native/NativeEnumSymbol.h \
+#         /usr/include/llvm/IR/TypeBuilder.h \
+#         /usr/include/llvm/Transforms/Utils/OrderedInstructions.h
+
+# rm -f /usr/share/man/man1/clang++.1 \
+#         /usr/share/man/man1/clang-cpp.1 \
+#         /usr/share/man/man1/diagnostics.1 \
+#         /usr/share/man/man3/SipHash24.3 \
+#         /usr/share/man/man3/bitstring.3 \
+#         /usr/share/man/man3/byteorder.3 \
+#         /usr/share/man/man3/directory.3 \
+#         /usr/share/man/man3/ethers.3 \
+#         /usr/share/man/man3/exec.3 \
+#         /usr/share/man/man3/fts.3 \
+#         /usr/share/man/man3/getcap.3 \
+#         /usr/share/man/man3/inet_net.3 \
+#         /usr/share/man/man3/md5.3 \
+#         /usr/share/man/man3/pcap-filter.3 \
+#         /usr/share/man/man3/pcap.3 \
+#         /usr/share/man/man3/pwcache.3 \
+#         /usr/share/man/man3/resolver.3 \
+#         /usr/share/man/man3/rmd160.3 \
+#         /usr/share/man/man3/sha1.3 \
+#         /usr/share/man/man3/sha2.3 \
+#         /usr/share/man/man3/stdarg.3 \
+#         /usr/share/man/man3/uucplock.3 \
+#         /usr/share/man/man3/uuid.3 \
+#         /usr/share/man/man3/ypclnt.3 \
+#         /usr/share/man/man4/i386/vmm.4 \
+#         /usr/share/man/man4/macppc/openprom.4 \
+#         /usr/share/man/man4/sparc64/openprom.4
+```
+2.50. Fazer a manutenção de pré-upgrade (6.7)
+```
+Editar o ficheiro /etc/man.conf
+Substituír
+`_whatdb /usr/share/man/whatis.db`
+por
+`manpath /usr/share/man`
+2.51. Fazer mount na VM ao cd de instalação da versão 6.7
+2.52. Fazer `boot` para o kernel bsd.rd e selecionar a opção `upgrade`
+>pt
+>wd0
+>wd0a
+>(Check)yes
+>(cd)cd0
+>(pathname)[6.7/amd64]
+>-x* -g*
+>(SHA256.sig)yes
+>done
+# reboot
+(Remover a imagem de instalação antes do novo boot)
+2.53. Correr o comando `sysmerge`
+```
+# sysmerge
+```
+2.54. Fazer um update local
+```
+# pkg_add -u
+```
+2.55. Fazer a manutenção pós-upgrade (6.7)
+```
+# rm -rf /usr/libdata/perl5/*/Storable \
+#        /usr/libdata/perl5/*/arybase.pm \
+#        /usr/libdata/perl5/*/auto/arybase \
+#        /usr/libdata/perl5/B/Debug.pm \
+#        /usr/libdata/perl5/Locale/{Codes,Country,Currency,Language,Script}* \
+#        /usr/libdata/perl5/Math/BigInt/CalcEmu.pm \
+#        /usr/libdata/perl5/unicore/To/_PerlWB.pl \
+#        /usr/libdata/perl5/unicore/lib/GCB/EB.pl \
+#        /usr/libdata/perl5/unicore/lib/GCB/GAZ.pl \
+#        /usr/share/man/man3p/B::Debug.3p \
+#        /usr/share/man/man3p/Locale::{Codes*,Country,Currency,Language,Script}.3p \
+#        /usr/share/man/man3p/Math::BigInt::CalcEmu.3p \
+#        /usr/share/man/man3p/arybase.3p
+
+# rm -f /usr/sbin/{dig,host,nslookup}
+```
+2.56. Atualizar da versão 6.7 para 7.0 usando o comando novo `sysupgrade`
+```
+# sysupgrade
+```
