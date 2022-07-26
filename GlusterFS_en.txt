@@ -1,0 +1,244 @@
+GlusterFS
+
+Virtual Machines used for this test
+        Gluster-1
+                Hostname: glustermajor
+                Ipaddr: 192.168.56.16(Nat Network), 192.168.122.5(Internal Network)
+        Gluster-2
+                Hostname: glusterplus
+                Ipaddr: 192.168.56.17(Nat Network), 192.168.122.6(Internal Network)
+        Gluster-3
+                Hostname glusterminus
+                Ipaddr: 192.168.56.18(Nat Network), 192.168.122.7(Internal Network)
+
+Network configurations
+1.1. Gluster-1
+/etc/sysconfig/network-scripts/ifcfg-enp0s3
+TYPE=Ethernet
+PROXY_METHOD=none
+BROWSER_ONLY=no
+BOOTPROTO=dhcp
+DEFROUTE=yes
+IPV4_FAILURE_FATAL=no
+IPV6INIT=yes
+IPV6_AUTOCONF=yes
+IPV6_DEFROUTE=yes
+IPV6_FAILURE_FATAL=no
+NAME=enp0s3
+UUID=95c22733-4790-4e3a-8cd3-33d8b8263343
+DEVICE=enp0s3
+ONBOOT=yes
+
+/etc/sysconfig/network-scripts/ifcfg-enp0s8
+TYPE=Ethernet
+PROXY_METHOD=none
+BROWSER_ONLY=no
+BOOTPROTO=none
+DEFROUTE=yes
+IPV4_FAILURE_FATAL=no
+IPV6INIT=yes
+IPV6_AUTOCONF=yes
+IPV6_DEFROUTE=yes
+IPV6_FAILURE_FATAL=no
+NAME=enp0s8
+UUID=6dbed9cf-ce5f-4ddd-8684-e25734704a9a
+DEVICE=enp0s8
+ONBOOT=yes
+IPADDR=192.168.122.5
+NETMASK=255.255.255.0
+
+1.2. Gluster-2
+/etc/sysconfig/network-scripts/ifcfg-enp0s3
+TYPE=Ethernet
+PROXY_METHOD=none
+BROWSER_ONLY=no
+BOOTPROTO=dhcp
+DEFROUTE=yes
+IPV4_FAILURE_FATAL=no
+IPV6INIT=yes
+IPV6_AUTOCONF=yes
+IPV6_DEFROUTE=yes
+IPV6_FAILURE_FATAL=no
+NAME=enp0s3
+UUID=95c22733-4790-4e3a-8cd3-33d8b8263343
+DEVICE=enp0s3
+ONBOOT=yes
+
+/etc/sysconfig/network-scripts/ifcfg-enp0s8
+TYPE=Ethernet
+PROXY_METHOD=none
+BROWSER_ONLY=no
+BOOTPROTO=none
+DEFROUTE=yes
+IPV4_FAILURE_FATAL=no
+IPV6INIT=yes
+IPV6_AUTOCONF=yes
+IPV6_DEFROUTE=yes
+IPV6_FAILURE_FATAL=no
+NAME=enp0s8
+UUID=6dbed9cf-ce5f-4ddd-8684-e25734704a9a
+DEVICE=enp0s8
+ONBOOT=yes
+IPADDR=192.168.122.6
+NETMASK=255.255.255.0
+
+Change the hostname of the cloned machine
+# hostnamectl set-hostname glusterplus
+
+1.3. Gluster-3
+/etc/sysconfig/network-scripts/ifcfg-enp0s3
+TYPE=Ethernet
+PROXY_METHOD=none
+BROWSER_ONLY=no
+BOOTPROTO=dhcp
+DEFROUTE=yes
+IPV4_FAILURE_FATAL=no
+IPV6INIT=yes
+IPV6_AUTOCONF=yes
+IPV6_DEFROUTE=yes
+IPV6_FAILURE_FATAL=no
+NAME=enp0s3
+UUID=95c22733-4790-4e3a-8cd3-33d8b8263343
+DEVICE=enp0s3
+ONBOOT=yes
+
+/etc/sysconfig/network-scripts/ifcfg-enp0s8
+TYPE=Ethernet
+PROXY_METHOD=none
+BROWSER_ONLY=no
+BOOTPROTO=none
+DEFROUTE=yes
+IPV4_FAILURE_FATAL=no
+IPV6INIT=yes
+IPV6_AUTOCONF=yes
+IPV6_DEFROUTE=yes
+IPV6_FAILURE_FATAL=no
+NAME=enp0s8
+UUID=6dbed9cf-ce5f-4ddd-8684-e25734704a9a
+DEVICE=enp0s8
+ONBOOT=yes
+IPADDR=192.168.122.7
+NETMASK=255.255.255.0
+
+Change the hostname of the clone machine
+# hostnamectl set-hostname glusterminus
+
+1.4. Edit the file /etc/hosts and add the hostnames and IPs on all of the machines
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+192.168.122.5	glustermajor
+192.168.122.6	glusterplus
+192.168.122.7	glusterminus
+
+In the official documentation it is advised that DNS is configured and working, especially if the cluster is to be deployed in production, however, it is also mentioned that for small test environments that simply adding the hostnames in the /etc/hosts file should be sufficient.
+
+1.5. Make sure all machines are comunication with each other through both ip and hostname
+ping 192.168.56.15
+ping 192.168.122.5
+ping glustermajor
+ping 192.168.56.16
+ping 192.168.122.6
+ping glusterplus
+ping 192.168.56.17
+ping 192.168.122.7
+ping glusterminus
+
+GlusterFS
+2.1. Install gluster
+# dnf install oracle-gluster-release-el8 -y
+# dnf config-manager --enable ol8_gluster_appstream ol8_baseos_latest ol8_appstream
+# dnf install @glusterfs/server -y
+
+2.2. Activate the gluster service and confirm that it is up
+# systemctl enable --now glusterd
+# systemctl status glusterd
+
+2.3. Allow the service to pass through the firewall 
+# firewall-cmd --permanent --add-service=glusterfs
+# firewall-cmd --reload
+
+In the official documentation it is mentioned that it is advised to turn off the firewall to improve the performance of GlusterFS, however since turning off the Firewall is a bad cybersecurity practice it is preferable to only open the service without disabling the service entirely. 
+
+2.5. Prepare the nodes for the creation of the pools
+# mkfs.xfs -f -i size=512 -L glusterfs /dev/sdb
+# mkdir -p /data/glusterfs/testvolume/testbrick
+
+In the official documentation it is mentioned that the "sweet spot" for the file size would be around the 128KB, however, in the Oracle documentation for this process it is used a file size of 512KB, hence why it is the chosen value for this test. 
+(In the CentOS documentation the file size used is also 512KB)
+
+2.6. Mount the created filesystem
+# echo 'LABEL=glusterfs /data/glusterfs/testvolume/testbrick xfs defaults 0 0' | tee -a /etc/fstab
+# mount -a
+
+2.7. Repeat these steps on all of the machines, to make this step faster it is possible to create a script with all the steps. (In this example, the name for the script is gluster.sh)
+dnf install oracle-gluster-release-el8 -y
+dnf config-manager --enable ol8_gluster_appstream ol8_baseos_latest ol8_appstream
+dnf install @glusterfs/server -y
+systemctl enable --now glusterd
+firewall-cmd --permanent --add-service=glusterfs
+firewall-cmd --reload
+mkfs.xfs -f -i size=512 -L glusterfs /dev/sdb
+mkdir -p /data/glusterfs/testvolume/testbrick
+echo 'LABEL=glusterfs /data/glusterfs/testvolume/testbrick xfs defaults 0 0' | tee -a /etc/fstab
+mount -a
+
+Send the script to all machines through glustermajor
+# scp gluster.sh glusterplus:/root
+# scp gluster.sh glusterminus:/root
+
+Make sure that the script has execute permissions
+# chmod 755 gluster.sh
+# ./gluster.sh
+
+2.8. Gather the probes
+# gluster peer probe glusterplus
+# gluster peer probe glusterminus
+
+2.9. Verify the state of the pools
+# gluster peer status
+Number of Peers: 2
+
+Hostname: glusterplus
+Uuid: 1ed522e8-4913-431f-ae9c-da6f0ea1dedb
+State: Peer in Cluster (Connected)
+
+Hostname: glusterminus
+Uuid: 6b14cc7f-dcee-4d06-b120-c00333e64dfd
+State: Peer in Cluster (Connected)
+
+# gluster pool list
+UUID					Hostname    	State
+1ed522e8-4913-431f-ae9c-da6f0ea1dedb	glusterplus 	Connected
+6b14cc7f-dcee-4d06-b120-c00333e64dfd	glusterminus	Connected
+a5ffc535-d647-48ec-aced-f527d076e712	localhost   	Connected
+
+2.10. Create the storage volume 
+# gluster volume create GlusterTestVolume replica 3 glustermajor:/data/glusterfs/testvolume/testbrick/bricktester glusterplus:/data/glusterfs/testvolume/testbrick/bricktester glusterminus:/data/glusterfs/testvolume/testbrick/bricktester
+
+By using the argument "replica 3" the volume is created with a redundancy that creates replicas of the files through "bricks" inside of the volume. 
+
+2.11. Start GlusterTestVolume so that it is possible to access the data inside of it
+# gluster volume start GlusterTestVolume
+
+Testing GlusterFS
+3.1. Create a directory and mount Gluster
+# mkdir /Glusterino
+# mount -t glusterfs glustermajor:GlusterTestVolume /Glusterino/
+To configure the filesystem in a way it will automatically mount on boot the following command can be used
+# echo 'LABEL=glustermajor/GlusterTestVolume /Glusterino glusterfs defaults,_netdev 0 0' | tee -a /etc/fstab
+
+3.2. Give execute permissions to the mounted directory with glusterfs and create a file there
+# chmod 777 /Glusterino/
+# touch /Glusterino/Testfile
+
+3.4. Confirm that the file was successfully replicated on the glusterplus and glusterminus bricks
+# ls -ltr /data/glusterfs/testvolume/testbrick/bricktester/
+
+3.5. Shutdown Gluster-3 and create a file in Gluster-1 
+Gluster-3
+# shutdown now
+
+Gluster-1
+# touch /Glusterino/ShutdownTestFile
+
+3.6. Start Gluster-3 and confirm that the file that was created in Gluster-1 was correctly replicated
