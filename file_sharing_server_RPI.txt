@@ -3,53 +3,6 @@
 File Sharing Server on the Raspberry Pi
 
 Hardware: Raspberry Pi 4 Model B 8GB (RPI), Toshiba Canvio Basics 4TB (External Hard Drive), Samsung Pro 32GB (SD Card)
-OS: Alpine Linux (aarch64)
-File Sharing Software: VSFTPD (Very Secure FTP Daemon)
-
-Alpine Linux Install
-1.1. First we need to install the operating system on the RPI, the image chosen was the one with the Raspberry Pi kernel. Out of the three options, the aarch64 architecture was chosen since this is the 8GB RAM version. The choice of Alpine for this project is because it comes with many security features in mind pre-built into the system which makes it more robust against regular attacks like a Buffer Overflow. Alpine Linux is also a very minimalist distribution which makes it low on resources.
-
-1.2. Once we have the image we need to mount the SD Card so that we can extract the Alpine Image into it.
-List available devices to identify the SD Card
-# lsblk
-Then, once identified, mount the SD Card
-# mount /dev/{device_name} /path/to/mount/the/device/on
-Extract the files from the Alpine image
-# gzip -d /path/to/alpine-rpi-3.16.1-aarch64.tar.gz
-Untar the file into the SD Card
-# tar xf /path/to/alpine-rpi-3.16.1-aarch64.tar.gz --directory=/path/where/SD Card/is/mounted/on
-
-1.3. Once the file transfer is complete, we need to synchronize the files to prevent any errors and then unmount the SD Card.
-# sync; umount /path/where/SD Card/is/mounted/on
-(Make sure that the SD Card is using the FAT file system, otherwise it won\'t boot)
-
-1.4. Insert the SD Card into the RPI and boot it up. 
-
-1.5. Once on the Login screen, the username is root and no password is required.
-
-1.6. After setup Alpine
-# setup-alpine
-Keyboard Layout: pt
-Variant: pt
-Hostname: vsalpine
-
-
-
-
-
-
-
-
-
-
-
-
-##############################
-##############################
-##############################
-File Sharing Server on the Raspberry Pi
-
-Hardware: Raspberry Pi 4 Model B 8GB (RPI), Toshiba Canvio Basics 4TB (External Hard Drive), Samsung Pro 32GB (SD Card)
 OS: Raspberry Pi OS (aarch64)
 File Sharing Software: VSFTPD (Very Secure FTP Daemon)
 
@@ -149,7 +102,8 @@ ssl_enable=NO
 # netstat -tulpn|grep vsftpd
 # telnet localhost 21
 
-
+####################################################################################
+WIP
 
 
 
