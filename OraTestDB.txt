@@ -191,25 +191,3 @@ GRANT UNLIMITED TABLESPACE TO jveloso;
 
 4.4. Gravar as alterações
 commit
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-############################################
-https://www.youtube.com/watch?v=ywJajzN9NhQ
-https://mufalani.wordpress.com/2020/03/06/installing-oracle-19c-solaris-sparc-64/
-https://learncodeshare.net/2015/05/01/configure-host-access-to-an-oracle-database-on-a-virtualbox-vm/
