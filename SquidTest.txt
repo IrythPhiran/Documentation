@@ -303,3 +303,14 @@ O serviço unbound.service deverá estar active e enabled sem erros.
 # firewall-cmd --add-port=53/tcp --permanent
 # firewall-cmd --add-port=53/udp --permanent
 # firewall-cmd --reload
+
+6.6. No SquidLinux-2 alterar o nameserver no ficheiro /etc/resolv.conf
+nameserver 10.0.2.15
+nameserver 192.168.122.1
+
+6.7. Testar se o DNS está a resolver nomes
+# ping google.com
+# host google.com
+# dig example @10.0.2.15
+
+6.8. Reiniciar ambas as máquinas e garantir que a ligação entre as mesmas ainda se mantém.
