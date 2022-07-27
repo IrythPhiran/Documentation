@@ -2,7 +2,7 @@
 
 OpenBSD 5.7 Setup
 
-1.1. Instalar o OpenBSD 5.7 para a máquina IBOPRP01V
+1.1. Install OpenBSD 5.7 into the machine IBOPRP01V
 >Install
 >(Keyboard)PT
 >(Hostname)openfish
@@ -15,7 +15,7 @@ OpenBSD 5.7 Setup
 >(X server)no
 >(xdm)no
 >(user)jveloso
->(disable `root` ssh)yes
+>(disable root` ssh)yes
 >(timezone)Europe/Lisbon
 >(disk)wd0
 >(use DUID)yes
@@ -30,10 +30,10 @@ OpenBSD 5.7 Setup
 >done
 # reboot
 
-1.2. Adicionar repositório com pacotes
+1.2. Add the repository with packages 
 # pkg_add ftp://ftp.openbsd.org/pub/OpenBSD/5.7/packages/&lt;arch&gt;/&lt;package-name&gt;
 
-1.3. Configurar o /etc/pf.conf (Packet Filter)
+1.3. Configure /etc/pf.conf (Packet Filter)
 #       $OpenBSD: pf.conf,v 1.49 2009/09/17 06:39:03 jmc Exp $
 #
 # See pf.conf(5) for syntax and examples.
@@ -71,49 +71,48 @@ pass out on em0 proto tcp to 172.19.1.110 port 443 received-on em0 nat-to 172.18
 
 # By default, do not permit remote connections to X11
 block in on ! lo0 proto tcp to port 6000:6010
-
 # pfctl -d
 # pfctl -e
 
-1.4. Instalar o wget
+1.4. Install wget
 # pkg_add wget
 
-1.5. Obter o pacote de instalação fonte do openssl
+1.5. Obtain the source install package of openssl
 # mkdir openssl
 # cd openssl
 # wget --no-check-certificate https://www.openssl.org/source/old/1.0.1/openssl-1.0.1u.tar.gz
 
-1.6. Extraír os ficheiros do openssl
+1.6. Extract the files from openssl
 # gunzip openssl-1.0.1u.tar.gz
 # tar xvf openssl-1.0.1u.tar
 
-1.7. Instalar o openssl
+1.7. Install openssl
 # cd openssl-1.0.1
 # ./Configure
 # make
 # make test
 # make install clean
 
-1.8. Instalar o software Git
+1.8. Install Git
 # pkg_add git
 
-1.9. Obter o pacote de instalação fonte do Pound
+1.9. Obtain install package for Pound
 # mkdir pound
 # cd pound
 # git clone https://github.com/lkundrak/Pound.git
 
-1.10. Instalar o Pound
+1.10. Install Pound
 # cd Pound
 # ./Configure
 # make install clean
 
-1.11. Enviar para o servidor o ficheiro de configuração custom do "Pound"
+1.11. Send into the OpenBSD machine the custom configuration file for Pound
 # scp -P 3027 /Users/jveloso/Downloads/pound.cfg jveloso@127.0.0.1:/home/jveloso
 
-1.12. Mover o ficheiro pound.cfg para o diretório apropriado.
+1.12. Move the file pound.cfg into the apropriate directory.
 # mv /home/jveloso/pound.cfg /usr/local/etc
 
-1.13. Criar um certificado ".pem"
+1.13. Create a .pem certificate
 # openssl genrsa -des3 -out domain.key 2048
 # openssl req -key domain.key -new -out domain.csr
 # openssl req -newkey rsa:2048 -keyout domain.key -out domain.csr
@@ -121,7 +120,7 @@ block in on ! lo0 proto tcp to port 6000:6010
 # openssl x509 -signkey domain.key -in domain.csr -req -days 365 -out domain.crt
 # cat domain.key domain.crt > /etc/pound/private.pem
 
-1.14. Editar o ficheiro de configuração do pound (/usr/local/etc/pound.cfg)
+1.14. Edit the configuration file for pount (/usr/local/etc/pound.cfg)
 # Global Directives
 User "proxy"
 Group "proxy"
@@ -145,8 +144,8 @@ ListenHTTP
         Redirect "https://www.example.com"
     End
     Service
-        HeadRequire "(Host: portal.example.com|Host: portal.example.com)"
-        Redirect "https://portal.example.com"
+        HeadRequire "(Host: example.com|Host: example.com)"
+        Redirect "https://example.com"
     End
     Service
         Redirect "https://www.example.com"
@@ -213,11 +212,11 @@ ListenHTTPS
 
 ########## Service for portal ################################################################
     Service
-        HeadRequire "(Host: portal.example.com)"
-        Redirect "https://portal.example.com"
+        HeadRequire "(Host: example.com)"
+        Redirect "https://example.com"
     End
     Service
-        HeadRequire "(Host: portal.example.com)"
+        HeadRequire "(Host: example.com)"
         BackEnd
             Address 172.19.1.131
             Port 8080
@@ -227,11 +226,11 @@ ListenHTTPS
 
 ########## Service for servicos ################################################################
     Service
-        HeadRequire "(Host: servicos.example.com)"
-        Redirect "https://servicos.example.com"
+        HeadRequire "(Host: example.com)"
+        Redirect "https://example.com"
     End
     Service
-        HeadRequire "(Host: servicos.example.com)"
+        HeadRequire "(Host: example.com)"
         BackEnd
             Address 172.18.1.131
             Port 8001
@@ -246,13 +245,14 @@ ListenHTTPS
 ########## EOF Catch all Service  ################################################################
 End
 
-1.15. Iniciar o Pound
+1.15. Start Pound
 # /usr/local/sbin/pound
 
-OpenBSD 5.7 to 7.0 upgrade
-2.1. Fazer mount na VM ao cd de instalação da versão 5.8
 
-2.2. Fazer boot para o kernel bsd.rd e selecionar a opção "upgrade"
+OpenBSD 5.7 to 7.0 upgrade
+2.1. Mount the install cd for version 5.8 in the VM
+
+2.2. Boot into the kernel bsd.rd and select the option "upgrade"
 >pt
 >wd0
 >wd0a
@@ -264,23 +264,23 @@ OpenBSD 5.7 to 7.0 upgrade
 >(SHA256.sig)yes
 >done
 # reboot
-\(Remover a imagem de instalação antes do novo boot)
+(Remove the installation image before the new boot)
 
-2.3. Correr o comando "sysmerge"
-#sysmerge
+2.3. Run the sysmerge command
+# sysmerge
 
-2.4. Remover e mover ficheiros de sistema
+2.4. Remove and move system files
 # rm -f /usr/bin/sudo /usr/bin/sudoedit /usr/sbin/visudo
 # rm -f /usr/share/man/man8/sudo.8 /usr/share/man/man8/sudoedit.8
 # rm -f /usr/share/man/man8/visudo.8 /usr/share/man/man5/sudoers.5
 # rm -f /usr/libexec/sudo_noexec.so
 
-2.5. Correr um update local
-#pkg_add -u
+2.5. Run a local update
+# pkg_add -u
 
-2.6. Fazer mount na VM ao cd de instalação da versão 5.9
+2.6. Mount the installation cd on the VM for version 5.9
 
-2.7. Fazer boot para o kernel bsd.rd e selecionar a opção "upgrade"
+2.7. Boot into the kernel bsd.rd and select the option "upgrade"
 >pt
 >wd0
 >wd0a
@@ -292,34 +292,34 @@ OpenBSD 5.7 to 7.0 upgrade
 >(SHA256.sig)yes
 >done
 # reboot
-\(Remover a imagem de instalação antes do novo boot)
+(Remove the installation image before the new boot)
 
-2.8. Correr o comando "sysmerge"
+2.8. Run the sysmerge command
 # sysmerge
 
-2.9 Remover e mover ficheiros de sistema
-rm -f /usr/libexec/smtpd/makemap
-rm -f /usr/libexec/smtpd/table-ldap
-rm -f /usr/libexec/smtpd/table-passwd
-rm -f /usr/libexec/smtpd/table-sqlite
-rm -f /usr/share/man/man5/table_passwd.5
-rm -f /usr/share/misc/termcap.db /usr/share/misc/terminfo.db
-rm -f /usr/X11R6/include/intel_*.h
-rm -f /usr/X11R6/include/r600_pci_ids.h
-rm -f /usr/X11R6/include/radeon_*.h
-rm -f /usr/include/malloc.h
-rm -f /usr/libexec/auth/login_tis
-rm -f /etc/rc.d/yppasswdd /usr/sbin/rpc.yppasswdd
+2.9. Remove and move system files
+# rm -f /usr/libexec/smtpd/makemap
+# rm -f /usr/libexec/smtpd/table-ldap
+# rm -f /usr/libexec/smtpd/table-passwd
+# rm -f /usr/libexec/smtpd/table-sqlite
+# rm -f /usr/share/man/man5/table_passwd.5
+# rm -f /usr/share/misc/termcap.db /usr/share/misc/terminfo.db
+# rm -f /usr/X11R6/include/intel_*.h
+# rm -f /usr/X11R6/include/r600_pci_ids.h
+# rm -f /usr/X11R6/include/radeon_*.h
+# rm -f /usr/include/malloc.h
+# rm -f /usr/libexec/auth/login_tis
+# rm -f /etc/rc.d/yppasswdd /usr/sbin/rpc.yppasswdd
 
-2.10. Correr um update local
-#pkg_add -u
+2.10. Run a local update
+# pkg_add -u
 
-2.11. Limpar o diretório "/usr/share/man"
+2.11. Clean the /usr/share/man directory
 # rm -rf /usr/share/man
 
-2.12. Fazer mount na VM ao cd de instalação da versão 6.0
+2.12. Mount the installation cd on the VM for version 6.0
 
-2.13. Fazer boot para o kernel bsd.rd e selecionar a opção "upgrade"
+2.13. Boot into the kernel bsd.rd and select the option "upgrade"
 >pt
 >wd0
 >wd0a
@@ -331,21 +331,21 @@ rm -f /etc/rc.d/yppasswdd /usr/sbin/rpc.yppasswdd
 >(SHA256.sig)yes
 >done
 # reboot
-\(Remover a imagem de instalação antes do novo boot)
+(Remove the installation image before the new boot)
 
-2.14. Correr o comando "sysmerge"
+2.14. Run the sysmerge command
 # sysmerge
 
-2.15. Re-compilar o Pound
+2.15. Re-compile Pound
 # ./Configure
 # make install clean
 
-2.16. Limpar o diretório "/usr/share/man"
+2.16. Clean the /usr/share/man directory
 # rm -rf /usr/share/man
 
-2.17. Fazer mount na VM ao cd de instalação da versão 6.1
+2.17. Mount the installation cd on the VM for version 6.1
 
-2.18. Fazer boot para o kernel bsd.rd e selecionar a opção "upgrade"
+2.18. Boot into the kernel bsd.rd and select the option "upgrade"
 >pt
 >wd0
 >wd0a
@@ -357,18 +357,18 @@ rm -f /etc/rc.d/yppasswdd /usr/sbin/rpc.yppasswdd
 >(SHA256.sig)yes
 >done
 # reboot
-\(Remover a imagem de instalação antes do novo boot)
+(Remove the installation image before the new boot)
 
-2.19. Correr o comando "sysmerge"
+2.19. Run the sysmerge command
 # sysmerge
 
-2.20 Criar o ficheiro "/etc/installurl"
+2.20. Create the file /etc/installurl
 echo 'https://example/pub/OpenBSD' > /etc/installurl
 
-2.21. Remover o "/etc/pkg.conf"
+2.21. Remove /etc/pkg.conf
 # rm /etc/pkg.conf
 
-2.22. Remover o pacote de perl
+2.22. Remove the perl package
 # rm -rf /usr/libdata/perl5/site_perl \
 #/usr/bin/perl5* \
 #/usr/lib/libperl.so.17.* \
@@ -395,17 +395,17 @@ echo 'https://example/pub/OpenBSD' > /etc/installurl
 #/usr/libdata/perl5/unicore/lib/Space \
 #/usr/libdata/perl5/version/vpp.pm
 
-2.23. Remover os dispositivos de som que não irão ser usados
+2.23. Remove all sound devices that won\'t be used
 # rm -f /dev/sound*
 
-2.24. Fazer a manutenção de pré-upgrade (6.2)
+2.24. Perform the pre-maintenance upgrade (6.2)
 # rm -rf /usr/share/man
 # fc -ln 1 | cut -f2- > ~/ksh_hist.txt
 # chgrp -R crontab /var/cron/atjobs
 
-2.25. Fazer mount na VM ao cd de instalação da versão (6.2)
+2.25. Mount the installation cd on the VM for version 6.2
 
-2.26. Fazer boot para o kernel bsd.rd e selecionar a opção "upgrade"
+2.26. Boot into the kernel bsd.rd and select the option "upgrade"
 >pt
 >wd0
 >wd0a
@@ -415,20 +415,22 @@ echo 'https://example/pub/OpenBSD' > /etc/installurl
 >-x* -g*
 >(SHA256.sig)yes
 >done
-# reboot 
-\(Remover a imagem de instalação antes do novo boot)
+# reboot
+(Remove the installation image before the new boot)
 
-2.27. Correr o comando "sysmerge"
+2.27. Run the sysmerge command
 # sysmerge
 
-2.28. Fazer um update local
+2.28. Perform a local update
 # pkg_add -u
 
-2.29. Fazer a manutenção do pré-upgrade (6.3)
+2.29. Perform the pre-maintenance upgrade (6.3)
 # rm -r /usr/share/man
 # rm -r /usr/share/compile
-2.30. Fazer mount na VM ao cd de instalação da versão 6.3
-2.31. Fazer boot para o kernel bsd.rd e selecionar a opção "upgrade"
+
+2.30. Mount the installation cd on the VM for version 6.3
+
+2.31. Boot into the kernel bsd.rd and select the option "upgrade"
 >pt
 >wd0
 >wd0a
@@ -439,17 +441,17 @@ echo 'https://example/pub/OpenBSD' > /etc/installurl
 >(SHA256.sig)yes
 >done
 # reboot
-\(Remover a imagem de instalação antes do novo boot)
+(Remove the installation image before the new boot)
 
-2.33. Correr o comando "sysmerge"
+2.33. Run the sysmerge command
 # sysmerge
 
-2.34. Fazer um update local
+2.34. Perform a local update
 # pkg_add -u
 
-2.35. Fazer mount na VM ao cd de instalação da versão 6.4
+2.35. Mount the installation cd on the VM for version 6.4
 
-2.36. Fazer boot para o kernel bsd.rd e selecionar a opção "upgrade"
+2.36. Boot into the kernel bsd.rd and select the option "upgrade"
 >pt
 >wd0
 >wd0a
@@ -461,26 +463,25 @@ echo 'https://example/pub/OpenBSD' > /etc/installurl
 >done
 # reboot
 
-\(Remover a imagem de instalação antes do novo boot)
+(Remove the installation image before the new boot)
 
-2.37. Correr o comando "sysmerge"
+2.37. Run the sysmerge command
 # sysmerge
 
-2.38. Fazer um update local
+2.38. Perform a local update
 # pkg_add -u
 
-2.39. Fazer a manutenção pós-upgrade (6.*)
+2.39. Perform the post-upgrade maintenance (6.*)
 # rm /dev/audio /dev/audioctl
 # rm /etc/rc.d/rtadvd /usr/sbin/rtadvd /usr/share/man/man5/rtadvd.conf.5 /usr/share/man/man8/rtadvd.8
 # userdel _rtadvd
 # groupdel _rtadvd
 
-2.40. Fazer a manutenção de pré-upgrade (6.5)
+2.40. Perform the pre-maintenance upgrade (6.5)
 # echo "vm.malloc_conf=CF" >> /etc/sysctl.conf
 
-2.41. Fazer mount na VM ao cd de instalação da versão 6.5
-
-2.42. Fazer boot para o kernel bsd.rd e selecionar a opção "upgrade"
+2.41. Mount the installation cd on the VM for version 6.5
+2.42. Boot into the kernel bsd.rd and select the option "upgrade"
 >pt
 >wd0
 >wd0a
@@ -491,15 +492,15 @@ echo 'https://example/pub/OpenBSD' > /etc/installurl
 >(SHA256.sig)yes
 >done
 # reboot
-\(Remover a imagem de instalação antes do novo boot)
+(Remove the installation image before the new boot)
 
-2.43. Correr o comando "sysmerge"
+2.43. Run the sysmerge command
 # sysmerge
 
-2.44. Fazer um update local
+2.44. Perform a local update
 # pkg_add -u
 
-2.45. Fazer a manutenção pós-upgrade (6.5)
+2.45. Perform the post-maintenance upgrade (6.5)
 # rm /usr/include/openssl/asn1_mac.h
 # rm /usr/bin/c2ph \
 # /usr/bin/pstruct \
@@ -524,9 +525,9 @@ echo 'https://example/pub/OpenBSD' > /etc/installurl
 # /usr/share/man/man1/pstruct.1 \
 # /usr/share/man/man3p/Locale::Codes::API.3p
 
-2.46. Fazer mount na VM ao cd de instalação da versão 6.6
+2.46. Mount the installation cd on the VM for version 6.6
 
-2.47. Fazer boot para o kernel bsd.rd e selecionar a opção "upgrade"
+2.47. Boot into the kernel bsd.rd and select the option "upgrade"
 >pt
 >wd0
 >wd0a
@@ -537,15 +538,15 @@ echo 'https://example/pub/OpenBSD' > /etc/installurl
 >(SHA256.sig)yes
 >done
 # reboot
-\(Remover a imagem de instalação antes do novo boot)
+(Remove the installation image before the new boot)
 
-2.48. Correr o comando "sysmerge"
+2.48. Run the sysmerge command
 # sysmerge
 
-2.49. Fazer um update local
+2.49. Perform a local update
 # pkg_add -u
 
-2.50. Fazer a manutenção pós-upgrade (6.6)
+2.50. Perform the post-upgrade maintenance (6.6)
 # rm -f /usr/share/man/man3p/carp.3p \
 #         /usr/share/man/man3p/Tie::ExtraHash.3p \
 #         /usr/share/man/man3p/Tie::StdHash.3p \
@@ -662,16 +663,16 @@ echo 'https://example/pub/OpenBSD' > /etc/installurl
 #         /usr/share/man/man4/macppc/openprom.4 \
 #         /usr/share/man/man4/sparc64/openprom.4
 
-2.50. Fazer a manutenção de pré-upgrade (6.7)
-Editar o ficheiro /etc/man.conf
-Substituír
-"_whatdb /usr/share/man/whatis.db"
-por
-"manpath /usr/share/man"
+2.50. Perform the pre-maintenance upgrade (6.7)
+Edit the /etc/man.conf file
+Replace
+_whatdb /usr/share/man/whatis.db
+with
+manpath /usr/share/man
 
-2.51. Fazer mount na VM ao cd de instalação da versão 6.7
+2.51. Mount the installation cd on the VM for version 6.7
 
-2.52. Fazer boot para o kernel bsd.rd e selecionar a opção "upgrade"
+2.52. Boot into the kernel bsd.rd and select the option "upgrade"
 >pt
 >wd0
 >wd0a
@@ -682,15 +683,14 @@ por
 >(SHA256.sig)yes
 >done
 # reboot
-\(Remover a imagem de instalação antes do novo boot)
-
-2.53. Correr o comando "sysmerge"
+(Remove the installation image before the new boot)
+2.53. Run the sysmerge command
 # sysmerge
 
-2.54. Fazer um update local
+2.54. Perform a local update
 # pkg_add -u
 
-2.55. Fazer a manutenção pós-upgrade (6.7)
+2.55. Perform the post-upgrade maintenance (6.7)
 # rm -rf /usr/libdata/perl5/*/Storable \
 #        /usr/libdata/perl5/*/arybase.pm \
 #        /usr/libdata/perl5/*/auto/arybase \
@@ -707,6 +707,6 @@ por
 
 # rm -f /usr/sbin/{dig,host,nslookup}
 
-2.56. Atualizar da versão 6.7 para 7.0 usando o comando novo "sysupgrade"
+2.56. Upgrade from version 6.7 to 7.0 using the new command "sysupgrade"
 # sysupgrade
 
