@@ -1,0 +1,241 @@
+#!/bin/bash
+
+Oracle Linux Another Proxy/DNS Test
+
+VMs
+1.1. PrivoxyTest-1
+hostname: privonet1
+IP: 10.0.2.15(NAT), 192.168.122.1(Internal Network)
+ssh port in nat network: 4444
+
+1.2. PrivoxyTest-2
+hostname: privonet2
+IP: 192.168.122.2(Internal Network)
+
+Network configuration
+2.1 PrivoxyTest-1
+Edit /etc/sysconfig/network-scripts/ifcfg-enp0s8 and make sure that the following parameters are as below;
+TYPE=Ethernet
+PROXY_METHOD=none
+BROWSER_ONLY=no
+BOOTPROTO=none
+DEFROUTE=yes
+IPV4_FAILURE_FATAL=no
+IPV6INIT=yes
+IPV6_AUTOCONF=yes
+IPV6_DEFROUTE=yes
+IPV6_FAILURE_FATAL=no
+NAME=enp0s8
+UUID=69d61313-2e09-49b8-8185-1fb5345c2929
+DEVICE=enp0s8
+ONBOOT=yes
+NETMASK=255.255.255.0
+IPADDR=192.168.122.1
+
+2.2. PrivoxyTest-2
+Edit /etc/sysconfig/network-scripts/ifcfg-enp0s3 and make sure that the following parameters are as below;
+TYPE=Ethernet
+PROXY_METHOD=none
+BROWSER_ONLY=no
+BOOTPROTO=none
+DEFROUTE=yes
+IPV4_FAILURE_FATAL=no
+IPV6INIT=yes
+IPV6_AUTOCONF=yes
+IPV6_DEFROUTE=yes
+IPV6_FAILURE_FATAL=no
+NAME=enp0s3
+UUID=69d61313-2e09-49b8-8185-1fb5345c2929
+DEVICE=enp0s3
+ONBOOT=yes
+NETMASK=255.255.255.0
+IPADDR=192.168.122.2
+
+Also change the hostname of the cloned machine
+#hostnamectl set-hostname privonet2
+
+2.3. Check the connection
+Test the connection between all of the machines
+PrivoxyTest-1
+# ping 192.168.122.2
+
+PrivoxyTest-2
+# ping 192.168.122.1
+
+It\'s important to make sure that the machine PrivoxyTest-2 is not comunication with machines outside of the internal network in any way at this point, the following ping must fail
+# ping 8.8.8.8
+
+Privoxy
+3.1. Privoxy is only available after adding the EPEL repository, as such it is necessary to install it first
+# dnf install oracle-epel-release-el8.x86_64
+# dnf install privoxy
+
+3.2. Create a backup copy of the configuration file for Privoxy
+# cp /etc/privoxy/config /etc/privoxy/config.bk
+Creating a backup copy allows a comparison of the changes made using the diff command and also allows us to fully revert the configuration process
+
+3.3. Edit /etc/privoxy/config
+Activate the website filtering file
+(...)
+trustfile trust
+(...)
+
+Edit the address that Privoxy will be listening to
+(...)
+listen-address  192.168.122.1:8118
+(...)
+
+Activate the debug level so that Privoxy generates logs
+(...)
+debug 2
+(...)
+
+3.4. Edit /etc/privoxy/trust
+(...)
++.google.com
+(...)
+By activating the "trustfile" option in stage 3.3. Privoxy will block all websites by default with the exeption of the ones added in /etc/privoxy/trust
+
+3.5. Startup Privoxy
+# systemctl enable privoxy
+# systemctl start privoxy
+# systemctl status privoxy
+
+3.6. Allow access to port 8118 where Privoxy is listening on
+# firewall-cmd --add-port=8118/tcp --permanent
+# firewall-cmd --reload
+
+3.7. Install telnet in PrivoxyTest-2 through a local repository to test the connection to PrivoxyTest-1
+# mkdir /mnt/cdrom
+# mount /dev/cdrom /mnt/cdrom
+# cat > /etc/yum.repos.d/local.repo <<EOF
+[LocalRepo_BaseOS]
+name=LocalRepository_BaseOS
+baseurl=file:///mnt/cdrom/BaseOS
+enabled=1
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-oracle
+
+[LocalRepo_AppStream]
+name=LocalRepository_AppStream
+baseurl=file:///mnt/cdrom/AppStream
+enabled=1
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-oracle
+EOF
+
+# dnf --disablerepo=* --enablerepo=Local* install telnet
+Attempt to connect to Privoxy\'s port through PrivoxyTest-2 
+# telnet 192.168.122.1 8118
+
+Finally, test if Privoxy is properly filtering the network traffic both in PrivoxyTest-1 as well as PrivoxyTest-2
+# curl -x http://192.168.122.1:8118 -I http://www.google.com
+# curl -x http://192.168.122.1:8118 -I http://www.microsoft.com
+# curl -x http://192.168.122.1:8118 -I http://www.facebook.com
+
+Access to google should return a "HTTP/1.1 200 OK" but access to facebook and microsoft should return a "HTTP/1.1 403 Request blocked by Privoxy".
+
+YUM
+4.1. Revert the access blocks in Privoxy so that all network traffic is allowed on all websites again. Edit /etc/privoxy/config
+(...)
+#trustfile trust
+(...)
+
+4.2. Restart Privoxy to apply the changes
+# systemctl restart privoxy
+
+4.3. In PrivoxyTest-2, edit /etc/yum.conf so that the command runs through PrivoxyTest-1
+[main]
+gpgcheck=1
+installonly_limit=3
+clean_requirements_on_remove=True
+best=True
+skip_if_unavailable=True
+proxy=http://192.168.122.1:8118
+
+The argument "skip_if_unavailable" is altered to "True" because in step 3.7 we added a local repository that won\'t be used, the image has since been removed from VirtualBox and as such all local* repositories will be "unavailable".
+
+4.4. Before the update starts, make sure PrivoxyTest-1 is properly intercepting traffic 
+# tail -f /var/log/privoxy/logfile
+
+4.5. Proceed with the update
+# yum update
+The command "tail -f" allows us to watch the logs in real time. Thoughout the process, access.log should generate several entries similar to the following;
+"2022-04-28 13:10:54.525 7fae43254700 Connect: Connected to yum.oracle.com[104.76.201.85]:443."
+"2022-04-28 13:10:54.525 7fae43254700 Connect: Created new connection to yum.oracle.com:443 on socket 12."
+"2022-04-28 13:10:54.525 7fae43254700 Connect: to yum.oracle.com:443 successful"
+
+4.6. Solidify that the network traffic can only exit through from PrivoxyTest-2 through the proxy hosted on PrivoxyTest-1
+Don\'t interrupt the command "tail -f /var/log/privoxy/logfile"
+Once again edit /etc/yum.conf and comment out the proxy field
+(...)
+#proxy=http://192.168.122.1:8118
+(...)
+Attempt to install a harmless package
+# dnf install htop
+The install should fail and no additional entry should be added to /var/log/privoxy/logfile
+
+Use the VM PrivoxyTest-1 as a router for PrivoxyTest-2
+5.1. Configure the Internal Network from PrivoxyTest-1 to be the default gateway from PrivoxyTest-2
+Once again edit /etc/sysconfig/network-scripts/ifcfg-enp0s3 in PrivoxyTest-2
+(...)
+GATEWAY=192.168.122.1
+(...)
+Restart the machine to execute the Network-script
+# shutdown -r now
+
+5.2. Confirm that PrivoxyTest-1 is being used as default gateway for PrivoxyTest-2
+[root@privonet2 ~]# route -n
+Kernel IP routing table
+Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
+0.0.0.0         192.168.122.1   0.0.0.0         UG    100    0        0 enp0s3
+192.168.122.0   0.0.0.0         255.255.255.0   U     100    0        0 enp0s3
+
+5.3. Also check if the Kernel forwarding is active (the output should be 1)
+# cat /proc/sys/net/ipv4/ip_forward
+
+In case it isn\'t, edit /etc/sysctl.conf
+net.ipv4.ip_forward=1
+
+Then, apply the changes to the configuration
+# sysctl -p /etc/sysctl.conf
+
+5.4. Configure Firewalld to accept package routing
+# firewall-cmd --permanent --direct --add-rule ipv4 nat POSTROUTING 0 -o enp0s3 -j MASQUERADE
+# firewall-cmd --permanent --direct --add-rule ipv4 filter FORWARD 0 -i enp0s8 -o enp0s3 -j ACCEPT
+# firewall-cmd --permanent --direct --add-rule ipv4 filter FORWARD 0 -i enp0s3 -o enp0s8 -m state --state RELATED,ESTABLISHED -j ACCEPT
+# firewall-cmd --reload
+
+DNS
+6.1. Install dnsmasq
+#dnf install dnsmasq
+
+6.2. Create a backup of the configuration file for dnsmasq
+# cp /etc/dnsmasq.conf /etc/dnsmasq.conf.bk
+
+6.3. Edit /etc/dnsmasq.conf
+(...)
+listen-address=::1,10.0.2.15, 192.168.122.2
+(...)
+
+6.4. Configure the dnsmasq service
+# systemctl enable dnsmasq
+# systemctl start dnsmasq
+# systemctl status dnsmasq
+The dnsmasq.service should be active, enabled and with no startup errors
+
+6.5. Allow the port where dnsmasq is listening to in Firewalld
+# firewall-cmd --add-port=53/tcp --permanent
+# firewall-cmd --add-port=53/udp --permanent
+# firewall-cmd --reload
+
+6.6. In PrivoxyTest-2, change the nameserver in /etc/resolv.conf
+nameserver 10.0.2.15
+nameserver 192.168.122.1
+
+6.7. Test if the DNS is resolving names
+# ping google.com
+# host google.com
+# dig example @10.0.2.15
+
+6.8. Restart both machines and confirm that the connection between them remains active
