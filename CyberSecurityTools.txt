@@ -1,0 +1,63 @@
+#!/bin/bash
+
+Cyber Security Tools 
+
+This file is meant to be used as a track record of all the tools used though the Cyber Security process, namely what they are used for and where they were first introduced.
+
+Books;
+1.1 - Occupy the Web - Getting Started Becoming a Master Hacker
+1.2 - CyberSecurity Essentials 
+
+Videos;
+2.1. - Ethical Hacking in 12 hours - Full Course - Learn to Hack!
+
+Personal Projects
+3.1 - Uuuuhhh...
+
+########################################################################1.1 - Getting Started Becoming a Master Hacker###############################################################
+
+#########################Passive Reconnaissance#########################
+- Google Hacking/Dorking
+	Google Hacking/Dorking is the act of specifying keywords and other things in the search parameters to obtain very specific results such as files or targeting only a single domain.
+- Netcraft
+	Netcraft is a website meant to track data about web servers and websites.
+- Whois
+	Whois is a querry tool that fetches information that was provided when registering a domain. 
+- Shodan
+	Shodan is a search engine that pulls all banners on webservers.
+- DNS
+	Domain Name System can be querried to obtain information about a specific domain. \(Tools used for this are often nslookup and dig)
+- p0f 
+	p0f or Passive Operating System Fingerprinting is used to scan for which operating system (and version) is being used on the scanned machine.
+
+#########################Active Reconnaissance##########################
+- Nmap
+	Network Mapper is a network port scanner. It can identify which ports are potentially open and which are listening. It can also execute scripts.
+- Hping
+	Hping3 is a type of network scanner but also a packet crafting tool. 
+- Whatweb
+	Whatweb is a python script that probes a target website for signatures of the server.
+- Builtwith
+	Builtwith is a website and browser extension that scans for what software is used on a given server.
+#########################Vulnerability Scanning#########################
+- Nessus
+	Nessus is a proprietary (once open-source) software that scans for known vulnerabilities and can provide a report. (Comes with a GUI)
+- OWASP-ZAP
+	OWASP-ZAP is an open-source vulnerability scanner with GUI and CLI interfaces.
+#########################Password Cracking##############################
+- John The Ripper 
+	John The Ripper is a password cracking tool.
+- ceWL
+	ceWL is a tool meant to create custom password lists by scraping a targeted website.
+- Crunch
+	Crunch is a tool that creates specialized word lists with given parameters.
+- Cupp
+	Cupp is a tool that creates tailored word lists for individuals by using social engineering.
+- Hashcat
+	Hashcat is a password cracking tool that allows the gpu for brute force attacks.
+- Pwdump
+	pwdump is a is a tool that performs an action called "DLL injection" to retrieve hashes from the SAM file in Windows machines.
+- Medusa
+	Medusa is a Remote Password Cracking tool.
+- Mimikatz
+	This tool extracts passwords from RAM on a running system.
